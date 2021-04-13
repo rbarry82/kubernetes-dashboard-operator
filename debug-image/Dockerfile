@@ -1,0 +1,10 @@
+FROM alpine:latest AS fetch
+RUN apk add --no-cache wget && \
+    wget -qO /tmp/bash https://github.com/robxu9/bash-static/releases/download/5.1.004-1.2.2/bash-linux-x86_64 && \
+    chmod 755 /tmp/bash
+
+FROM kubernetesui/dashboard:v2.0.0
+COPY --from=fetch /tmp/bash /bash
+COPY ./entrypoint.sh /entrypoint
+ENTRYPOINT ["/entrypoint"]
+

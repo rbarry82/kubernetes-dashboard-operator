@@ -1,0 +1,26 @@
+# Copyright 2021 Canonical
+# See LICENSE file for licensing details.
+name: kubernetes-dashboard
+description: |
+  Charm to operate the Kubernetes Dashboard
+summary: |
+  Charm to operate the Kubernetes Dashboard
+bases:
+  - name: ubuntu
+    channel: 20.04/stable
+
+containers:
+  dashboard:
+    resource: dashboard-image
+    mounts:
+      - storage: logs
+        location: /tmp
+
+storage:
+  logs:
+    type: filesystem
+
+resources:
+  dashboard-image:
+    type: oci-image
+    description: Docker image for kubernetesui/dashboard
