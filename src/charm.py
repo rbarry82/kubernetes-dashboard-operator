@@ -169,6 +169,7 @@ class KubernetesDashboardCharm(CharmBase):
         # Get an API client
         cl = kubernetes.client.ApiClient()
         core_api = kubernetes.client.CoreV1Api(cl)
+        auth_api = kubernetes.client.RbacAuthorizationV1Api(cl)
         try:
             # Create the 'kubernetes-dashboard' service account
             logger.debug("Creating additional Kubernetes ServiceAccounts")
@@ -179,7 +180,11 @@ class KubernetesDashboardCharm(CharmBase):
                     metadata=self._template_meta("kubernetes-dashboard"),
                 ),
             )
+        except kubernetes.client.exceptions.ApiException as e:
+            if e.status != 409:
+                raise
 
+        try:
             # Create the 'kubernetes-dashboard' service
             logger.debug("Creating additional Kubernetes Services")
             core_api.create_namespaced_service(
@@ -193,7 +198,11 @@ class KubernetesDashboardCharm(CharmBase):
                     ),
                 ),
             )
+        except kubernetes.client.exceptions.ApiException as e:
+            if e.status != 409:
+                raise
 
+        try:
             # Create the 'kubernetes-dashboard-certs' secret
             logger.debug("Creating additional Kubernetes Secrets")
             core_api.create_namespaced_secret(
@@ -204,7 +213,11 @@ class KubernetesDashboardCharm(CharmBase):
                     type="Opaque",
                 ),
             )
+        except kubernetes.client.exceptions.ApiException as e:
+            if e.status != 409:
+                raise
 
+        try:
             # Create the 'kubernetes-dashboard-csrf' secret
             core_api.create_namespaced_secret(
                 namespace=self.model.name,
@@ -215,7 +228,11 @@ class KubernetesDashboardCharm(CharmBase):
                     data={"csrf": ""},
                 ),
             )
+        except kubernetes.client.exceptions.ApiException as e:
+            if e.status != 409:
+                raise
 
+        try:
             # Create the 'kubernetes-dashboard-key-holder' secret
             core_api.create_namespaced_secret(
                 namespace=self.model.name,
@@ -225,7 +242,11 @@ class KubernetesDashboardCharm(CharmBase):
                     type="Opaque",
                 ),
             )
+        except kubernetes.client.exceptions.ApiException as e:
+            if e.status != 409:
+                raise
 
+        try:
             # Create the 'kubernetes-dashboard-settings' configmap
             logger.debug("Creating additional Kubernetes ConfigMaps")
             core_api.create_namespaced_config_map(
@@ -235,8 +256,11 @@ class KubernetesDashboardCharm(CharmBase):
                     metadata=self._template_meta("kubernetes-dashboard-settings"),
                 ),
             )
+        except kubernetes.client.exceptions.ApiException as e:
+            if e.status != 409:
+                raise
 
-            auth_api = kubernetes.client.RbacAuthorizationV1Api(cl)
+        try:
             # Create the Kubernetes Role definition
             logger.debug("Creating additional Kubernetes Roles")
             auth_api.create_namespaced_role(
@@ -288,7 +312,11 @@ class KubernetesDashboardCharm(CharmBase):
                     ],
                 ),
             )
+        except kubernetes.client.exceptions.ApiException as e:
+            if e.status != 409:
+                raise
 
+        try:
             # Create ClusterRole for dashboard
             logger.debug("Creating additional Kubernetes ClusterRoles")
             auth_api.create_cluster_role(
@@ -308,7 +336,11 @@ class KubernetesDashboardCharm(CharmBase):
                     ],
                 )
             )
+        except kubernetes.client.exceptions.ApiException as e:
+            if e.status != 409:
+                raise
 
+        try:
             # Create a RoleBinding
             logger.debug("Creating additional Kubernetes RoleBindings")
             auth_api.create_namespaced_role_binding(
@@ -330,7 +362,11 @@ class KubernetesDashboardCharm(CharmBase):
                     ],
                 ),
             )
+        except kubernetes.client.exceptions.ApiException as e:
+            if e.status != 409:
+                raise
 
+        try:
             # Create a ClusterRoleBinding
             logger.debug("Creating additional Kubernetes ClusterRoleBindings")
             auth_api.create_cluster_role_binding(
@@ -356,7 +392,7 @@ class KubernetesDashboardCharm(CharmBase):
             )
         except kubernetes.client.exceptions.ApiException as e:
             if e.status != 409:
-                pass
+                raise
 
     def _template_meta(self, name) -> kubernetes.client.V1ObjectMeta:
         """Helper method to return common Kubernetes V1ObjectMeta"""

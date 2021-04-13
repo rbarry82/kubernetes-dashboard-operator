@@ -54,16 +54,16 @@ You should end up with some output like the following:
 ```
 ❯ juju status
 Model      Controller  Cloud/Region        Version  SLA          Timestamp
-dashboard  micro       microk8s/localhost  2.9-rc9  unsupported  15:21:57+01:00
+dashboard  micro       microk8s/localhost  2.9-rc9  unsupported  16:41:02+01:00
 
-App       Version  Status  Scale  Charm                 Store  Channel  Rev  OS      Address  Message
-k8s-dash           active      1  kubernetes-dashboard  local            30  ubuntu
+App                            Version  Status  Scale  Charm                          Store  Channel  Rev  OS      Address  Message
+kubernetes-dashboard-operator           active      1  kubernetes-dashboard-operator  local             0  ubuntu
 
-Unit         Workload  Agent  Address       Ports  Message
-k8s-dash/0*  active    idle   10.1.215.217
+Unit                              Workload  Agent  Address       Ports  Message
+kubernetes-dashboard-operator/0*  active    idle   10.1.215.226
 ```
 
-You can now visit (using the example above): https://10.1.215.217:8443 and login to the dashboard
+You can now visit (using the example above): https://10.1.215.226:8443 and login to the dashboard
 
 **NOTE**: See known issues, but you won't be able to visit the URL in Chrome. Somewhere the certificates are being generated incorrectly and Chrome will not let you pass -- you can test in Firefox.
 
