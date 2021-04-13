@@ -37,7 +37,7 @@ $ juju add-model dashboard
 
 # Deploy!
 $ juju deploy ./kubernetes-dashboard.charm \
-    --resource jnsgruk-image=kubernetesui/dashboard:v2.0.0 \
+    --resource dashboard-image=kubernetesui/dashboard:v2.0.0 \
     --config kube-config="$(microk8s config)"
 # Wait for the deployment to complete
 $ watch -n1 --color "juju status --color"
