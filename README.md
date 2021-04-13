@@ -36,7 +36,7 @@ $ sudo snap refresh juju --channel=2.9/candidate
 $ juju add-model dashboard
 
 # Deploy!
-$ juju deploy ./kubernetes-dashboard.charm \
+$ juju deploy ./kubernetes-dashboard-operator.charm \
     --resource dashboard-image=kubernetesui/dashboard:v2.0.0 \
     --config kube-config="$(microk8s config)"
 # Wait for the deployment to complete

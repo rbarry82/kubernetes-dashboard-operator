@@ -355,10 +355,8 @@ class KubernetesDashboardCharm(CharmBase):
                 )
             )
         except kubernetes.client.exceptions.ApiException as e:
-            if e.reason == "Conflict":
+            if e.status != 409:
                 pass
-            else:
-                raise e
 
     def _template_meta(self, name) -> kubernetes.client.V1ObjectMeta:
         """Helper method to return common Kubernetes V1ObjectMeta"""

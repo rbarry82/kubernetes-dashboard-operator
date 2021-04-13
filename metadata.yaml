@@ -1,6 +1,6 @@
 # Copyright 2021 Canonical
 # See LICENSE file for licensing details.
-name: kubernetes-dashboard
+name: kubernetes-dashboard-operator
 description: |
   Charm to operate the Kubernetes Dashboard
 summary: |
