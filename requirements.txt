@@ -1,2 +1,2 @@
-https://github.com/canonical/operator/archive/refs/heads/master.zip
+ops
 kubernetes

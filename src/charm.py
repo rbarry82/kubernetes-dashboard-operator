@@ -11,7 +11,7 @@ import ops
 from ops.charm import CharmBase, InstallEvent, PebbleReadyEvent, StopEvent
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +24,13 @@ class KubernetesDashboardCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.dashboard_pebble_ready, self._on_dashboard_pebble_ready)
+        self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.stop, self._on_stop)
 
     def _on_install(self, event: InstallEvent) -> None:
-        logger.debug("Creating Kubernetes resources")
+        if not self.k8s_auth():
+            event.defer()
+            return
         self._create_additional_resources()
 
     def _on_stop(self, event: StopEvent) -> None:
@@ -70,24 +72,23 @@ class KubernetesDashboardCharm(CharmBase):
         stateful_set = apps_api.read_namespaced_stateful_set(name=self.app.name, namespace=self.model.name)
         return stateful_set.spec.template.spec.service_account_name == "kubernetes-dashboard"
 
-    def _on_dashboard_pebble_ready(self, event: PebbleReadyEvent) -> None:
+    def _on_config_changed(self, event) -> None:
         """ Handle the pebble_ready event for the dashboard container"""
-        logger.debug("Pebble ready handler")
-
-        if not self._check_patched():
-            logger.debug("Patching StatefulSet...")
-            self._patch_dashboard_stateful_set()
+        if not self.k8s_auth():
+            event.defer()
             return
 
-        container = event.workload
+        if not self._check_patched():
+            self._patch_dashboard_stateful_set()
+            self.unit.status = MaintenanceStatus("waiting for changes to apply")
+
+        container = self.unit.get_container("dashboard")
         # Add our initial config layer
         container.add_layer("dashboard", self._dashboard_layer(), combine=True)
-        # Start the container and report the status to Juju
-        try:
-            container.autostart()
-        except ops.pebble.ChangeError as e:
-            logger.warning("failed to autostart services with message: %s", e.err)
-            event.defer()
+
+        if not container.get_service("dashboard").is_running():
+            container.start("dashboard")
+
         self.unit.status = ActiveStatus()
 
     def _dashboard_layer(self) -> dict:
@@ -118,8 +119,7 @@ class KubernetesDashboardCharm(CharmBase):
     def _patch_dashboard_stateful_set(self) -> None:
         """Patch the StatefulSet created by Juju to include specific
         ServiceAccount and Secret mounts"""
-        # Ensure we're authenticated with the Kubernetes API
-        self.k8s_auth()
+        self.unit.status = MaintenanceStatus("patching StatefulSet for additional k8s permissions")
         # Get an API client
         cl = kubernetes.client.ApiClient()
         apps_api = kubernetes.client.AppsV1Api(cl)
@@ -129,7 +129,7 @@ class KubernetesDashboardCharm(CharmBase):
         stateful_set = apps_api.read_namespaced_stateful_set(name=self.app.name, namespace=self.model.name)
         # Add the service account to the spec
         stateful_set.spec.template.spec.service_account_name = "kubernetes-dashboard"
-        # Get the details of the kubernetes-dashboard service account
+        # Get the details of the kubernetes - dashboard service account
         service_account = core_api.read_namespaced_service_account(
             name="kubernetes-dashboard", namespace=self.model.name
         )
@@ -163,9 +163,7 @@ class KubernetesDashboardCharm(CharmBase):
 
     def _create_additional_resources(self) -> None:
         """Create additional Kubernetes resources"""
-        # Authenticate to the Kubernetes API
-        logger.debug("Authenticating to Kubernetes API")
-        self.k8s_auth()
+        self.unit.status = MaintenanceStatus("creating k8s resources")
         # Get an API client
         cl = kubernetes.client.ApiClient()
         core_api = kubernetes.client.CoreV1Api(cl)
@@ -337,7 +335,10 @@ class KubernetesDashboardCharm(CharmBase):
                 )
             )
         except kubernetes.client.exceptions.ApiException as e:
-            if e.status != 409:
+            if e.status == 403:
+                logger.warn("ClusterRole for metrics collection not created, insufficient permissions")
+                pass
+            elif e.status != 409:
                 raise
 
         try:
@@ -391,7 +392,10 @@ class KubernetesDashboardCharm(CharmBase):
                 )
             )
         except kubernetes.client.exceptions.ApiException as e:
-            if e.status != 409:
+            if e.status == 403:
+                logger.warn("ClusterRoleBinding for metrics collection not created, insufficient permissions")
+                pass
+            elif e.status != 409:
                 raise
 
     def _template_meta(self, name) -> kubernetes.client.V1ObjectMeta:
@@ -405,14 +409,24 @@ class KubernetesDashboardCharm(CharmBase):
     def k8s_auth(self):
         """Authenticate to kubernetes."""
         if self._authed:
-            return
+            return True
         # Remove os.environ.update when lp:1892255 is FIX_RELEASED.
         os.environ.update(
             dict(e.split("=") for e in Path("/proc/1/environ").read_text().split("\x00") if "KUBERNETES_SERVICE" in e)
         )
-
+        # Authenticate against the Kubernetes API using a mounted ServiceAccount token
         kubernetes.config.load_incluster_config()
+        # Test the service account we've got for sufficient perms
+        auth_api = kubernetes.client.RbacAuthorizationV1Api(kubernetes.client.ApiClient())
+        try:
+            role = auth_api.read_namespaced_role(namespace=self.model.name, name=self.app.name)
+        except:
+            # If we can't read a namespaced role, we definitely don't have enough permissions
+            self.unit.status = BlockedStatus("Run juju trust on this application to continue")
+            return False
+
         self._authed = True
+        return True
 
 
 if __name__ == "__main__":
