@@ -1,6 +1,6 @@
 # Copyright 2021 Canonical
 # See LICENSE file for licensing details.
-name: kubernetes-dashboard-operator
+name: jnsgruk-kubernetes-dashboard
 description: |
   Charm to operate the Kubernetes Dashboard
 summary: |

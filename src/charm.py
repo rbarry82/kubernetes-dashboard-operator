@@ -410,13 +410,8 @@ class KubernetesDashboardCharm(CharmBase):
         os.environ.update(
             dict(e.split("=") for e in Path("/proc/1/environ").read_text().split("\x00") if "KUBERNETES_SERVICE" in e)
         )
-        # Work around for lp#1920102 - allow the user to pass in k8s config manually.
-        if self.config["kube-config"]:
-            with open("/kube-config", "w") as kube_config:
-                kube_config.write(self.config["kube-config"])
-            kubernetes.config.load_kube_config(config_file="/kube-config")
-        else:
-            kubernetes.config.load_incluster_config()
+
+        kubernetes.config.load_incluster_config()
         self._authed = True
 
 

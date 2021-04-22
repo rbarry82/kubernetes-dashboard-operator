@@ -32,13 +32,17 @@ Now you're ready to deploy the Charm:
 ```bash
 # For now, we require the 2.9/candidate channel until features land in candidate/stable
 $ sudo snap refresh juju --channel=2.9/candidate
+# Bootstrap
+$ juju bootstrap microk8s micro
 # Create a model for our deployment
 $ juju add-model dashboard
 
 # Deploy!
-$ juju deploy ./kubernetes-dashboard-operator.charm \
-    --resource dashboard-image=kubernetesui/dashboard:v2.0.0 \
-    --config kube-config="$(microk8s config)"
+$ juju deploy ./jnsgruk-kubernetes-dashboard.charm \
+    --resource dashboard-image=kubernetesui/dashboard:v2.0.0
+
+# Trust the app to give it K8s privileges
+$ juju trust jnsgruk-kubernetes-dashboard
 # Wait for the deployment to complete
 $ watch -n1 --color "juju status --color"
 ```
@@ -57,10 +61,10 @@ Model      Controller  Cloud/Region        Version  SLA          Timestamp
 dashboard  micro       microk8s/localhost  2.9-rc9  unsupported  16:41:02+01:00
 
 App                            Version  Status  Scale  Charm                          Store  Channel  Rev  OS      Address  Message
-kubernetes-dashboard-operator           active      1  kubernetes-dashboard-operator  local             0  ubuntu
+jnsgruk-kubernetes-dashboard           active      1  jnsgruk-kubernetes-dashboard  local             0  ubuntu
 
 Unit                              Workload  Agent  Address       Ports  Message
-kubernetes-dashboard-operator/0*  active    idle   10.1.215.226
+jnsgruk-kubernetes-dashboard/0*  active    idle   10.1.215.226
 ```
 
 You can now visit (using the example above): https://10.1.215.226:8443 and login to the dashboard
@@ -71,5 +75,4 @@ You can now visit (using the example above): https://10.1.215.226:8443 and login
 
 - The metrics pod usually deployed with the dashboard needs to be charmed seperately (and probably deployed with a bundle alongside this charm)
 - The certficate generated for the dashboard is invalid, Google Chrome will not let you visit the URL by default
-- No ability to pass service tokens through, hence passing the `kubeconfig` as a config item
 - No unit tests - waiting on support for Sidecar Charms in the Operator Framework ([see issue](https://github.com/canonical/operator/issues/488))
