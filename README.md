@@ -75,7 +75,7 @@ $ charmcraft pack
 # Deploy
 $ juju deploy ./jnsgruk-kubernetes-dashboard.charm \
     --resource dashboard-image=kubernetesui/dashboard:v2.2.0 \
-    --resource dashboard-image=kubernetesui/metrics-scraper:v1.0.6
+    --resource scraper-image=kubernetesui/metrics-scraper:v1.0.6
 ```
 
 ## Known Issues
