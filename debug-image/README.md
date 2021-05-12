@@ -45,7 +45,5 @@ def _dashboard_layer(self) -> dict:
 You can now deploy with:
 
 ```bash
-juju deploy ./kubernetes-dashboard.charm k8s-dash \
-    --resource dashboard-image=jnsgruk/dashboard:debug \
-    --config kube-config="$(microk8s config)"
+juju deploy ./jnsgruk-kubernetes-dashboard.charm --resource dashboard-image=jnsgruk/dashboard:debug \
 ```

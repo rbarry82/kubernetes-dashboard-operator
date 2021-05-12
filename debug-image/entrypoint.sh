@@ -3,7 +3,6 @@
 /dashboard \
   --insecure-bind-address=0.0.0.0 \
   --bind-address=0.0.0.0 \
-  --insecure-port=9090 \
-  --port=8443 \
-  --auto-generate-certificates=true \
-  --namespace=dashboard >/tmp/debug.log 2>&1
+  --auto-generate-certificates \
+  --log_dir=/tmp \
+  --namespace=dashboard >/debug.log 2>&1

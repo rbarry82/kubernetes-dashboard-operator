@@ -12,13 +12,6 @@ bases:
 containers:
   dashboard:
     resource: dashboard-image
-    mounts:
-      - storage: logs
-        location: /tmp
-
-storage:
-  logs:
-    type: filesystem
 
 resources:
   dashboard-image:

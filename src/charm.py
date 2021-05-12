@@ -2,15 +2,21 @@
 # Copyright 2021 Canonical
 # See LICENSE file for licensing details.
 
+import base64
+import datetime
 import logging
 import os
+from ipaddress import IPv4Address
 from pathlib import Path
+from subprocess import check_output
 
+from cryptography import x509
 from kubernetes import kubernetes
 from ops.charm import CharmBase, InstallEvent, StopEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 
+import cert
 import resources
 
 logger = logging.getLogger(__name__)
@@ -67,6 +73,7 @@ class KubernetesDashboardCharm(CharmBase):
 
         # Check if the dashboard service is already running and start it if not
         if not container.get_service("dashboard").is_running():
+            self._check_tls_certs()
             container.start("dashboard")
 
         self.unit.status = ActiveStatus()
@@ -76,19 +83,15 @@ class KubernetesDashboardCharm(CharmBase):
         # Build the command for the dashboard service
         cmd = [
             "/dashboard",
-            "--insecure-bind-address=0.0.0.0",
             "--bind-address=0.0.0.0",
-            "--auto-generate-certificates",
+            "--tls-cert-file=tls.crt",
+            "--tls-key-file=tls.key",
             f"--namespace={self.model.name}",
         ]
+        logger.debug("Dashboard command: %s", " ".join(cmd))
         return {
             "summary": "pebble config layer for kubernetes dashboard",
-            "services": {
-                "dashboard": {
-                    "override": "replace",
-                    "command": " ".join(cmd),
-                }
-            },
+            "services": {"dashboard": {"override": "replace", "command": " ".join(cmd)}},
         }
 
     def _on_delete_resources_action(self, event):
@@ -98,6 +101,60 @@ class KubernetesDashboardCharm(CharmBase):
             r = resources.K8sDashboardResources(self)
             r.delete()
             event.set_results({"message": "successfully deleted kubernetes resources"})
+
+    def _check_tls_certs(self):
+        """Create a self-signed certificate for the Dashboard if required"""
+        # Get access to the Kubernetes CoreV1 API
+        api = kubernetes.client.CoreV1Api(kubernetes.client.ApiClient())
+
+        # Setup the required FQDN and Pod IP for any cert in use or to be generated
+        pod_ip = IPv4Address(check_output(["unit-get", "private-address"]).decode().strip())
+        fqdn = f"{self.app.name}.{self.model.name}.svc.cluster.local"
+
+        # First read the current certificate from Kubernetes
+        secret = api.read_namespaced_secret(
+            name="kubernetes-dashboard-certs", namespace=self.model.name
+        )
+        # If there is already a certificate populated in the secret, validate it
+        if secret.data:
+            try:
+                # Create an X509 Certificate from the Kubernetes secret, if one is specified
+                c = x509.load_pem_x509_certificate(base64.b64decode(secret.data["tls.crt"]))
+
+                # Get the list of IP Addresses in the SAN field
+                cert_san_ips = c.extensions.get_extension_for_class(
+                    x509.SubjectAlternativeName
+                ).value.get_values_for_type(x509.IPAddress)
+
+                # If the cert is valid and pod IP is already in the cert, we're good
+                if pod_ip in cert_san_ips and c.not_valid_after >= datetime.datetime.utcnow():
+                    return
+            except KeyError:
+                # KeyError raised by trying to access data['tls.crt'] if
+                # it isn't populated
+                pass
+
+        # If we get this far, the cert is either not present, or invalid
+        # Generate a valid self-signed certificate, set the Pod IP as a SAN
+        tls = cert.SelfSignedCert([fqdn], [pod_ip])
+        # Define the Kubernetes secret
+        secret = {
+            "namespace": self.model.name,
+            "body": kubernetes.client.V1Secret(
+                api_version="v1",
+                metadata=kubernetes.client.V1ObjectMeta(
+                    namespace=self.model.name,
+                    name="kubernetes-dashboard-certs",
+                    labels={"app.kubernetes.io/name": self.app.name},
+                ),
+                data={
+                    "tls.crt": base64.b64encode(tls.cert).decode(),
+                    "tls.key": base64.b64encode(tls.key).decode(),
+                },
+            ),
+        }
+        # Patch to ensure the secret has the details of the newly generated certificate
+        api.patch_namespaced_secret(name=secret["body"].metadata.name, **secret)
 
     @property
     def _statefulset_patched(self) -> bool:
