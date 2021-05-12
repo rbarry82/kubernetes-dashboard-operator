@@ -216,8 +216,6 @@ class KubernetesDashboardCharm(CharmBase):
 
         # Read the StatefulSet we're deployed into
         s = api.read_namespaced_stateful_set(name=self.app.name, namespace=self.model.name)
-        # Add the service account to the spec
-        s.spec.template.spec.service_account_name = "kubernetes-dashboard"
         # Add the required volumes to the StatefulSet spec
         s.spec.template.spec.volumes.extend(r.dashboard_volumes)
         # Add the required volume mounts to the Dashboard container spec
