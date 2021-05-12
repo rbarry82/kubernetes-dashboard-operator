@@ -64,10 +64,18 @@ class KubernetesDashboardCharm(CharmBase):
         # Default StatefulSet needs patching for extra volume mounts. Ensure that
         # the StatefulSet is patched on each invocation.
         if not self._statefulset_patched:
-            self._patch_dashboard_stateful_set()
+            self._patch_stateful_set()
             self.unit.status = MaintenanceStatus("waiting for changes to apply")
 
-        # Add our Pebble config layer
+        # Add a Pebble config layer to the scraper container
+        container = self.unit.get_container("scraper")
+        container.add_layer("scraper", self._scraper_layer(), combine=True)
+
+        # Check if the scraper service is already running and start it if not
+        if not container.get_service("scraper").is_running():
+            container.start("scraper")
+
+        # Add a Pebble config layer to the dashboard container
         container = self.unit.get_container("dashboard")
         container.add_layer("dashboard", self._dashboard_layer(), combine=True)
 
@@ -86,12 +94,22 @@ class KubernetesDashboardCharm(CharmBase):
             "--bind-address=0.0.0.0",
             "--tls-cert-file=tls.crt",
             "--tls-key-file=tls.key",
+            "--sidecar-host=http://localhost:8000",
             f"--namespace={self.model.name}",
         ]
         logger.debug("Dashboard command: %s", " ".join(cmd))
         return {
             "summary": "pebble config layer for kubernetes dashboard",
-            "services": {"dashboard": {"override": "replace", "command": " ".join(cmd)}},
+            # "services": {"dashboard": {"override": "replace", "command": " ".join(cmd)}},
+            "services": {"dashboard": {"override": "replace", "command": "/entrypoint"}},
+        }
+
+    def _scraper_layer(self) -> dict:
+        """Returns initial Pebble configuration layer for Kubernetes Dashboard"""
+        # Build the command for the dashboard service
+        return {
+            "summary": "pebble config layer for kubernetes metrics scraper",
+            "services": {"scraper": {"override": "replace", "command": "/metrics-sidecar"}},
         }
 
     def _on_delete_resources_action(self, event):
@@ -104,57 +122,41 @@ class KubernetesDashboardCharm(CharmBase):
 
     def _check_tls_certs(self):
         """Create a self-signed certificate for the Dashboard if required"""
-        # Get access to the Kubernetes CoreV1 API
-        api = kubernetes.client.CoreV1Api(kubernetes.client.ApiClient())
-
         # Setup the required FQDN and Pod IP for any cert in use or to be generated
         pod_ip = IPv4Address(check_output(["unit-get", "private-address"]).decode().strip())
-        fqdn = f"{self.app.name}.{self.model.name}.svc.cluster.local"
 
-        # First read the current certificate from Kubernetes
-        secret = api.read_namespaced_secret(
-            name="kubernetes-dashboard-certs", namespace=self.model.name
-        )
-        # If there is already a certificate populated in the secret, validate it
-        if secret.data:
-            try:
-                # Create an X509 Certificate from the Kubernetes secret, if one is specified
-                c = x509.load_pem_x509_certificate(base64.b64decode(secret.data["tls.crt"]))
+        # TODO: Add a branch here for if a secret is specified in config
+        # Make the directory we'll use for certs if it doesn't exist
+        container = self.unit.get_container("dashboard")
+        container.make_dir("/certs", make_parents=True)
 
-                # Get the list of IP Addresses in the SAN field
-                cert_san_ips = c.extensions.get_extension_for_class(
-                    x509.SubjectAlternativeName
-                ).value.get_values_for_type(x509.IPAddress)
-
-                # If the cert is valid and pod IP is already in the cert, we're good
-                if pod_ip in cert_san_ips and c.not_valid_after >= datetime.datetime.utcnow():
-                    return
-            except KeyError:
-                # KeyError raised by trying to access data['tls.crt'] if
-                # it isn't populated
-                pass
+        if "tls.crt" in [x.name for x in container.list_files("/certs")]:
+            # Pull the tls.crt file from the workload container
+            file = container.pull("/certs/tls.crt").read()
+            # Create an x509 Certificate object with the contents of the file
+            c = x509.load_pem_x509_certificate(file.read())
+            # Get the list of IP Addresses in the SAN field
+            cert_san_ips = c.extensions.get_extension_for_class(
+                x509.SubjectAlternativeName
+            ).value.get_values_for_type(x509.IPAddress)
+            # If the cert is valid and pod IP is already in the cert, we're good
+            if pod_ip in cert_san_ips and c.not_valid_after >= datetime.datetime.utcnow():
+                return
 
         # If we get this far, the cert is either not present, or invalid
-        # Generate a valid self-signed certificate, set the Pod IP as a SAN
-        tls = cert.SelfSignedCert([fqdn], [pod_ip])
-        # Define the Kubernetes secret
-        secret = {
-            "namespace": self.model.name,
-            "body": kubernetes.client.V1Secret(
-                api_version="v1",
-                metadata=kubernetes.client.V1ObjectMeta(
-                    namespace=self.model.name,
-                    name="kubernetes-dashboard-certs",
-                    labels={"app.kubernetes.io/name": self.app.name},
-                ),
-                data={
-                    "tls.crt": base64.b64encode(tls.cert).decode(),
-                    "tls.key": base64.b64encode(tls.key).decode(),
-                },
-            ),
-        }
-        # Patch to ensure the secret has the details of the newly generated certificate
-        api.patch_namespaced_secret(name=secret["body"].metadata.name, **secret)
+        # Set the FQDN of the certificate
+        fqdn = f"{self.app.name}.{self.model.name}.svc.cluster.local"
+
+        # Get the service IP for the auto-created kubernetes service
+        api = kubernetes.client.CoreV1Api(kubernetes.client.ApiClient())
+        svc = api.read_namespaced_service(name=self.app.name, namespace=self.model.name)
+        svc_ip = IPv4Address(svc.spec.cluster_ip)
+
+        # Generate a valid self-signed certificate, set the Pod IP/Svc IP as SANs
+        tls = cert.SelfSignedCert([fqdn], [pod_ip, svc_ip])
+        # Write the generated certificate and key to file
+        container.push("/certs/tls.crt", tls.cert)
+        container.push("/certs/tls.key", tls.key)
 
     @property
     def _statefulset_patched(self) -> bool:
@@ -168,7 +170,7 @@ class KubernetesDashboardCharm(CharmBase):
         # Check if it has been patched
         return stateful_set.spec.template.spec.service_account_name == "kubernetes-dashboard"
 
-    def _patch_dashboard_stateful_set(self) -> None:
+    def _patch_stateful_set(self) -> None:
         """Patch the StatefulSet created by Juju to include specific
         ServiceAccount and Secret mounts"""
         self.unit.status = MaintenanceStatus("patching StatefulSet for additional k8s permissions")
@@ -184,6 +186,8 @@ class KubernetesDashboardCharm(CharmBase):
         s.spec.template.spec.volumes.extend(r.dashboard_volumes)
         # Add the required volume mounts to the Dashboard container spec
         s.spec.template.spec.containers[1].volume_mounts.extend(r.dashboard_volume_mounts)
+        # Add the required volume mounts to the Scraper container spec
+        s.spec.template.spec.containers[2].volume_mounts.extend(r.metrics_scraper_volume_mounts)
 
         # Patch the StatefulSet with our modified object
         api.patch_namespaced_stateful_set(name=self.app.name, namespace=self.model.name, body=s)

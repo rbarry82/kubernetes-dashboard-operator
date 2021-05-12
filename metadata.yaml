@@ -12,8 +12,13 @@ bases:
 containers:
   dashboard:
     resource: dashboard-image
+  scraper:
+    resource: scraper-image
 
 resources:
   dashboard-image:
     type: oci-image
     description: Docker image for kubernetesui/dashboard
+  scraper-image:
+    type: oci-image
+    description: Docker image for kubernetesui/metrics-scraper

@@ -62,9 +62,12 @@ class K8sDashboardResources:
                 self.core_api.create_namespaced_service(**service)
             else:
                 logger.info(
-                    "service '%s' in namespace '%s' exists, not creating",
+                    "service '%s' in namespace '%s' exists, patching",
                     service["body"].metadata.name,
                     service["namespace"],
+                )
+                self.core_api.patch_namespaced_service(
+                    name=service["body"].metadata.name, **service
                 )
 
         # Create Kubernetes ConfigMaps
@@ -175,7 +178,7 @@ class K8sDashboardResources:
 
     @property
     def dashboard_volumes(self) -> dict:
-        """Returns the additional volumes required by the Dashboard StatefulSet"""
+        """Returns the additional volumes required by the Dashboard"""
         # Get the service account details so we can reference it's token
         service_account = self.core_api.read_namespaced_service_account(
             name="kubernetes-dashboard", namespace=self.model.name
@@ -187,11 +190,19 @@ class K8sDashboardResources:
                     secret_name=service_account.secrets[0].name
                 ),
             ),
+            # kubernetes.client.V1Volume(
+            #     name="kubernetes-dashboard-certs",
+            #     secret=kubernetes.client.V1SecretVolumeSource(
+            #         secret_name="kubernetes-dashboard-certs"
+            #     ),
+            # ),
             kubernetes.client.V1Volume(
-                name="kubernetes-dashboard-certs",
-                secret=kubernetes.client.V1SecretVolumeSource(
-                    secret_name="kubernetes-dashboard-certs"
-                ),
+                name="tmp-volume-metrics",
+                empty_dir=kubernetes.client.V1EmptyDirVolumeSource(medium="Memory"),
+            ),
+            kubernetes.client.V1Volume(
+                name="tmp-volume-dashboard",
+                empty_dir=kubernetes.client.V1EmptyDirVolumeSource(),
             ),
         ]
 
@@ -199,9 +210,21 @@ class K8sDashboardResources:
     def dashboard_volume_mounts(self) -> dict:
         """Returns the additional volume mounts for the dashboard containers"""
         return [
+            kubernetes.client.V1VolumeMount(mount_path="/tmp", name="tmp-volume-dashboard"),
+            # kubernetes.client.V1VolumeMount(
+            #     mount_path="/certs", name="kubernetes-dashboard-certs"
+            # ),
             kubernetes.client.V1VolumeMount(
-                mount_path="/certs", name="kubernetes-dashboard-certs"
+                mount_path="/var/run/secrets/kubernetes.io/serviceaccount",
+                name="kubernetes-dashboard-service-account",
             ),
+        ]
+
+    @property
+    def metrics_scraper_volume_mounts(self) -> dict:
+        """Returns the additional volume mounts for the scraper containers"""
+        return [
+            kubernetes.client.V1VolumeMount(mount_path="/tmp", name="tmp-volume-metrics"),
             kubernetes.client.V1VolumeMount(
                 mount_path="/var/run/secrets/kubernetes.io/serviceaccount",
                 name="kubernetes-dashboard-service-account",
@@ -254,39 +277,67 @@ class K8sDashboardResources:
                     data={"csrf": ""},
                 ),
             },
-            {
-                "namespace": self.model.name,
-                "body": kubernetes.client.V1Secret(
-                    api_version="v1",
-                    metadata=kubernetes.client.V1ObjectMeta(
-                        namespace=self.model.name,
-                        name="kubernetes-dashboard-certs",
-                        labels={"app.kubernetes.io/name": self.app.name},
-                    ),
-                    type="Opaque",
-                ),
-            },
+            # {
+            #     "namespace": self.model.name,
+            #     "body": kubernetes.client.V1Secret(
+            #         api_version="v1",
+            #         metadata=kubernetes.client.V1ObjectMeta(
+            #             namespace=self.model.name,
+            #             name="kubernetes-dashboard-certs",
+            #             labels={"app.kubernetes.io/name": self.app.name},
+            #         ),
+            #         type="Opaque",
+            #     ),
+            # },
         ]
 
     @property
     def _services(self) -> list:
         """Return a list of Kubernetes services needed by the Kubernetes Dashboard"""
         return [
+            # Note that this service is actually created by Juju, we are patching
+            # it here to include the correct port mapping
+            # TODO: Update when support improves in Juju
             {
                 "namespace": self.model.name,
                 "body": kubernetes.client.V1Service(
                     api_version="v1",
                     metadata=kubernetes.client.V1ObjectMeta(
                         namespace=self.model.name,
-                        name="kubernetes-dashboard",
+                        name=self.app.name,
                         labels={"app.kubernetes.io/name": self.app.name},
                     ),
                     spec=kubernetes.client.V1ServiceSpec(
-                        ports=[kubernetes.client.V1ServicePort(port=443, target_port=8443)],
+                        ports=[
+                            kubernetes.client.V1ServicePort(
+                                name="dashboard",
+                                port=443,
+                                target_port=8443,
+                            )
+                        ],
                         selector={"app.kubernetes.io/name": self.app.name},
                     ),
                 ),
-            }
+            },
+            {
+                "namespace": self.model.name,
+                "body": kubernetes.client.V1Service(
+                    api_version="v1",
+                    metadata=kubernetes.client.V1ObjectMeta(
+                        namespace=self.model.name,
+                        name="dashboard-metrics-scraper",
+                        labels={"app.kubernetes.io/name": self.app.name},
+                    ),
+                    spec=kubernetes.client.V1ServiceSpec(
+                        ports=[
+                            kubernetes.client.V1ServicePort(
+                                name="metrics-scraper", port=8000, target_port=8000
+                            )
+                        ],
+                        selector={"app.kubernetes.io/name": self.app.name},
+                    ),
+                ),
+            },
         ]
 
     @property
