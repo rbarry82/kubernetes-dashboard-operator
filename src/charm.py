@@ -100,8 +100,7 @@ class KubernetesDashboardCharm(CharmBase):
         logger.debug("Dashboard command: %s", " ".join(cmd))
         return {
             "summary": "pebble config layer for kubernetes dashboard",
-            # "services": {"dashboard": {"override": "replace", "command": " ".join(cmd)}},
-            "services": {"dashboard": {"override": "replace", "command": "/entrypoint"}},
+            "services": {"dashboard": {"override": "replace", "command": " ".join(cmd)}},
         }
 
     def _scraper_layer(self) -> dict:
@@ -132,7 +131,7 @@ class KubernetesDashboardCharm(CharmBase):
 
         if "tls.crt" in [x.name for x in container.list_files("/certs")]:
             # Pull the tls.crt file from the workload container
-            file = container.pull("/certs/tls.crt").read()
+            file = container.pull("/certs/tls.crt")
             # Create an x509 Certificate object with the contents of the file
             c = x509.load_pem_x509_certificate(file.read())
             # Get the list of IP Addresses in the SAN field

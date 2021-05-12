@@ -78,6 +78,14 @@ $ juju deploy ./jnsgruk-kubernetes-dashboard.charm \
     --resource dashboard-image=kubernetesui/metrics-scraper:v1.0.6
 ```
 
+## Known Issues
+
+- Due to [this issue](https://bugs.launchpad.net/juju/+bug/1926568), the `stop` and `remove` hooks do not always fire correctly. In this case, that results in the various Kubernetes resources that are created by the charm not being removed successfully. For now, there is an action that can be run to remove all created Kubernetes resources prior to removal of the application:
+
+```
+$ juju run-action jnsgruk-kubernetes-dashboard/0 delete-resources
+```
+
 ## TODO
 
 - [x] Fix the broken default generated certificates when none are specified

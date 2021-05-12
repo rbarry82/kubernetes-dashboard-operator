@@ -1,3 +1,10 @@
 /venv
 *.py[cod]
 *.charm
+/debug-images
+/.vscode
+refresh
+.flake8
+.gitignore
+run_tests
+/tests
