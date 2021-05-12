@@ -14,6 +14,7 @@ class K8sDashboardResources:
     def __init__(self, charm):
         self.model = charm.model
         self.app = charm.app
+        self.config = charm.config
         # Setup some Kubernetes API clients we'll need
         kcl = kubernetes.client.ApiClient()
         self.apps_api = kubernetes.client.AppsV1Api(kcl)
@@ -32,10 +33,11 @@ class K8sDashboardResources:
                 self.core_api.create_namespaced_service_account(**sa)
             else:
                 logger.info(
-                    "service account '%s' in namespace '%s' exists, not creating",
+                    "service account '%s' in namespace '%s' exists, patching",
                     sa["body"].metadata.name,
                     sa["namespace"],
                 )
+                self.core_api.patch_namespaced_service_account(name=sa["body"].metadata.name, **sa)
 
         # Create Kubernetes Secrets
         for secret in self._secrets:
@@ -80,10 +82,11 @@ class K8sDashboardResources:
                 self.core_api.create_namespaced_config_map(**cm)
             else:
                 logger.info(
-                    "configmap '%s' in namespace '%s' exists, not creating",
+                    "configmap '%s' in namespace '%s' exists, patching",
                     cm["body"].metadata.name,
                     cm["namespace"],
                 )
+                self.core_api.patch_namespaced_config_map(name=cm["body"].metadata.name, **cm)
 
         # Create Kubernetes Roles
         for role in self._roles:
@@ -95,10 +98,11 @@ class K8sDashboardResources:
                 self.auth_api.create_namespaced_role(**role)
             else:
                 logger.info(
-                    "role '%s' in namespace '%s' exists, not creating",
+                    "role '%s' in namespace '%s' exists, patching",
                     role["body"].metadata.name,
                     role["namespace"],
                 )
+                self.auth_api.patch_namespaced_role(name=role["body"].metadata.name, **role)
 
         # Create Kubernetes Role Bindings
         for rb in self._rolebindings:
@@ -110,10 +114,11 @@ class K8sDashboardResources:
                 self.auth_api.create_namespaced_role_binding(**rb)
             else:
                 logger.info(
-                    "role binding '%s' in namespace '%s' exists, not creating",
+                    "role binding '%s' in namespace '%s' exists, patching",
                     rb["body"].metadata.name,
                     rb["namespace"],
                 )
+                self.auth_api.patch_namespaced_role_binding(name=rb["body"].metadata.name, **rb)
 
         # Create Kubernetes Cluster Roles
         for cr in self._clusterroles:
@@ -123,7 +128,8 @@ class K8sDashboardResources:
             if not r.items:
                 self.auth_api.create_cluster_role(**cr)
             else:
-                logger.info("cluster role '%s' exists, not creating", cr["body"].metadata.name)
+                logger.info("cluster role '%s' exists, patching", cr["body"].metadata.name)
+                self.auth_api.patch_cluster_role(name=cr["body"].metadata.name, **cr)
 
         # Create Kubernetes Cluster Role Bindings
         for crb in self._clusterrolebindings:
@@ -134,8 +140,9 @@ class K8sDashboardResources:
                 self.auth_api.create_cluster_role_binding(**crb)
             else:
                 logger.info(
-                    "cluster role binding '%s' exists, not creating", crb["body"].metadata.name
+                    "cluster role binding '%s' exists, patching", crb["body"].metadata.name
                 )
+                self.auth_api.patch_cluster_role_binding(name=crb["body"].metadata.name, **crb)
 
     def delete(self) -> None:
         """Delete all of the Kubernetes resources created by the apply method"""
@@ -294,10 +301,11 @@ class K8sDashboardResources:
     @property
     def _services(self) -> list:
         """Return a list of Kubernetes services needed by the Kubernetes Dashboard"""
+        # Note that this service is actually created by Juju, we are patching
+        # it here to include the correct port mapping
+        # TODO: Update when support improves in Juju
+
         return [
-            # Note that this service is actually created by Juju, we are patching
-            # it here to include the correct port mapping
-            # TODO: Update when support improves in Juju
             {
                 "namespace": self.model.name,
                 "body": kubernetes.client.V1Service(
@@ -310,10 +318,15 @@ class K8sDashboardResources:
                     spec=kubernetes.client.V1ServiceSpec(
                         ports=[
                             kubernetes.client.V1ServicePort(
-                                name="dashboard",
+                                name="dashboard-http",
+                                port=80,
+                                target_port=9090,
+                            ),
+                            kubernetes.client.V1ServicePort(
+                                name="dashboard-https",
                                 port=443,
                                 target_port=8443,
-                            )
+                            ),
                         ],
                         selector={"app.kubernetes.io/name": self.app.name},
                     ),

@@ -13,6 +13,7 @@ from subprocess import check_output
 from cryptography import x509
 from kubernetes import kubernetes
 from ops.charm import CharmBase, InstallEvent, StopEvent
+from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 
@@ -26,6 +27,7 @@ class KubernetesDashboardCharm(CharmBase):
     """Charm the service."""
 
     _authed = False
+    _stored = StoredState()
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -33,6 +35,8 @@ class KubernetesDashboardCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.stop, self._on_stop)
         self.framework.observe(self.on.delete_resources_action, self._on_delete_resources_action)
+
+        self._stored.set_default(dashboard_cmd="")
 
     def _on_install(self, event: InstallEvent) -> None:
         """Handle the install event, create Kubernetes resources"""
@@ -67,49 +71,83 @@ class KubernetesDashboardCharm(CharmBase):
             self._patch_stateful_set()
             self.unit.status = MaintenanceStatus("waiting for changes to apply")
 
+        # Configure and start the Metrics Scraper
+        self._config_scraper()
+        # Configure and start the Kubernetes Dashboard
+        self._config_dashboard()
+
+        self.unit.status = ActiveStatus()
+
+    def _config_scraper(self) -> dict:
+        """Configure Pebble to start the Kubernetes Metrics Scraper"""
+        # Define a simple layer
+        layer = {
+            "services": {"scraper": {"override": "replace", "command": "/metrics-sidecar"}},
+        }
         # Add a Pebble config layer to the scraper container
         container = self.unit.get_container("scraper")
-        container.add_layer("scraper", self._scraper_layer(), combine=True)
-
+        container.add_layer("scraper", layer, combine=True)
         # Check if the scraper service is already running and start it if not
         if not container.get_service("scraper").is_running():
             container.start("scraper")
 
-        # Add a Pebble config layer to the dashboard container
-        container = self.unit.get_container("dashboard")
-        container.add_layer("dashboard", self._dashboard_layer(), combine=True)
+    def _config_dashboard(self) -> None:
+        """Configure Pebble to start the Kubernetes Dashboard"""
+        # Generate a command for the dashboard
+        cmd = self._dashboard_cmd()
+        # Check if anything has changed in the layer
+        if cmd != self._stored.dashboard_cmd:
+            # Add a Pebble config layer to the dashboard container
+            container = self.unit.get_container("dashboard")
+            # Create a new layer
+            layer = {
+                "services": {"dashboard": {"override": "replace", "command": cmd}},
+            }
+            container.add_layer("dashboard", layer, combine=True)
+            # Store the command used in the StoredState
+            self._stored.dashboard_cmd = cmd
 
-        # Check if the dashboard service is already running and start it if not
-        if not container.get_service("dashboard").is_running():
-            self._check_tls_certs()
+            # Check if the dashboard service is already running and start it if not
+            if container.get_service("dashboard").is_running():
+                container.stop("dashboard")
+                logger.info("Dashboard service stopped")
+
+            # Check if we're running on HTTPS or HTTP
+            if not self.config["bind-insecure"]:
+                # Validate or generate TLS certs
+                self._check_tls_certs()
+
+            logger.debug("Starting Dashboard with command: %s", cmd)
             container.start("dashboard")
+            logger.info("Dashboard service started")
 
-        self.unit.status = ActiveStatus()
-
-    def _dashboard_layer(self) -> dict:
-        """Returns initial Pebble configuration layer for Kubernetes Dashboard"""
-        # Build the command for the dashboard service
+    def _dashboard_cmd(self) -> str:
+        """Build a command to start the Kubernetes Dashboard based on config"""
+        # Base command and arguments
         cmd = [
             "/dashboard",
             "--bind-address=0.0.0.0",
-            "--tls-cert-file=tls.crt",
-            "--tls-key-file=tls.key",
             "--sidecar-host=http://localhost:8000",
             f"--namespace={self.model.name}",
         ]
-        logger.debug("Dashboard command: %s", " ".join(cmd))
-        return {
-            "summary": "pebble config layer for kubernetes dashboard",
-            "services": {"dashboard": {"override": "replace", "command": " ".join(cmd)}},
-        }
 
-    def _scraper_layer(self) -> dict:
-        """Returns initial Pebble configuration layer for Kubernetes Dashboard"""
-        # Build the command for the dashboard service
-        return {
-            "summary": "pebble config layer for kubernetes metrics scraper",
-            "services": {"scraper": {"override": "replace", "command": "/metrics-sidecar"}},
-        }
+        if self.config["bind-insecure"]:
+            cmd.extend(
+                [
+                    "--insecure-bind-address=0.0.0.0",
+                    "--default-cert-dir=/null",
+                ]
+            )
+        else:
+            cmd.extend(
+                [
+                    "--default-cert-dir=/certs",
+                    "--tls-cert-file=tls.crt",
+                    "--tls-key-file=tls.key",
+                ]
+            )
+        # TODO: Add "--enable-insecure-login", when relation is made
+        return " ".join(cmd)
 
     def _on_delete_resources_action(self, event):
         """Action event handler to remove all extra kubernetes resources"""
@@ -133,7 +171,7 @@ class KubernetesDashboardCharm(CharmBase):
             # Pull the tls.crt file from the workload container
             file = container.pull("/certs/tls.crt")
             # Create an x509 Certificate object with the contents of the file
-            c = x509.load_pem_x509_certificate(file.read())
+            c = x509.load_pem_x509_certificate(file.read().encode())
             # Get the list of IP Addresses in the SAN field
             cert_san_ips = c.extensions.get_extension_for_class(
                 x509.SubjectAlternativeName
