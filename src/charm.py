@@ -2,7 +2,6 @@
 # Copyright 2021 Canonical
 # See LICENSE file for licensing details.
 
-import base64
 import datetime
 import logging
 import os
@@ -249,10 +248,13 @@ class KubernetesDashboardCharm(CharmBase):
 
         try:
             auth_api.list_cluster_role()
-        except:
-            # If we can't read a cluster role, we don't have enough permissions
-            self.unit.status = BlockedStatus("Run juju trust on this application to continue")
-            return False
+        except kubernetes.client.exceptions.ApiException as e:
+            if e.status == 403:
+                # If we can't read a cluster role, we don't have enough permissions
+                self.unit.status = BlockedStatus("Run juju trust on this application to continue")
+                return False
+            else:
+                raise e
 
         self._authed = True
         return True
