@@ -31,7 +31,7 @@ $ juju bootstrap microk8s micro
 $ juju add-model dashboard
 
 # Deploy!
-$ juju deploy jnsgruk-kubernetes-dashboard
+$ juju deploy jnsgruk-kubernetes-dashboard --channel=edge
 
 # If your cluster has RBAC enabled, you'll need to
 # trust the app to give it the requisite K8s privileges
