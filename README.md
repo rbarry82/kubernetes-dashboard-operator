@@ -35,7 +35,7 @@ $ juju deploy jnsgruk-kubernetes-dashboard --channel=edge
 
 # If your cluster has RBAC enabled, you'll need to
 # trust the app to give it the requisite K8s privileges
-$ juju trust jnsgruk-kubernetes-dashboard
+$ juju trust jnsgruk-kubernetes-dashboard --scope=cluster
 
 # Wait for the deployment to complete
 $ watch -n1 --color "juju status --color"
