@@ -1,78 +1,88 @@
-## Kubernetes Dashboard Operator (Sidecar Edition)
+# Kubernetes Dashboard Operator (Sidecar Edition)
 
-This charm is a demonstration of the new Sidecar Charm pattern for Juju 2.9. It uses [Pebble](https://github.com/canonical/pebble) and the [Python Operator Framework](https://pythonoperatorframework.io).
+This charm is a demonstration of the new Sidecar Charm pattern for Juju 2.9. It uses [Pebble](https://github.com/canonical/pebble) and the [Charmed Operator Framework](https://juju.is/docs/sdk).
 
 This charm deploys and operates the [Kubernetes Dashboard](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/).
 
-At present, this charm cannot be published to Charmhub, so you will need to build it locally. To setup a local test environment with [MicroK8s](https://microk8s.io), do the following:
+## Getting Started
+
+Setup a test environment with MicroK8s:
 
 ```bash
+# Install MicroK8s
 $ sudo snap install --classic microk8s
+# Add your current user to the 'microk8s' group
 $ sudo usermod -aG microk8s $(whoami)
+# Enable some required MicroK8s addons
 $ sudo microk8s enable storage dns
+# Alias the bundled MicroK8s kubectl binary
 $ sudo snap alias microk8s.kubectl kubectl
+# Make the new user group addition effective now for the current shell
 $ newgrp microk8s
 ```
 
-Next install Charmcraft and build the Charm
+Next, install Juju and deploy the Kubernetes Dashboard:
 
 ```bash
-# Install Charmcraft
-$ sudo snap install charmcraft --edge
-
-# Clone an example charm
-$ git clone https://github.com/jnsgruk/charm-kubernetes-dashboard
-# Build the charm
-$ cd charm-kubernetes-dashboard
-$ charmcraft build
-```
-
-Now you're ready to deploy the Charm:
-
-```bash
-# For now, we require the 2.9/candidate channel until features land in candidate/stable
-$ sudo snap refresh juju --channel=2.9/candidate
-# Bootstrap
+$ sudo snap refresh juju --channel=latest/stable
+# Bootstrap a Juju controller onto MicroK8s
 $ juju bootstrap microk8s micro
 # Create a model for our deployment
 $ juju add-model dashboard
 
 # Deploy!
-$ juju deploy ./jnsgruk-kubernetes-dashboard.charm \
-    --resource dashboard-image=kubernetesui/dashboard:v2.0.0
+$ juju deploy jnsgruk-kubernetes-dashboard
 
-# Trust the app to give it K8s privileges
+# If your cluster has RBAC enabled, you'll need to
+# trust the app to give it the requisite K8s privileges
 $ juju trust jnsgruk-kubernetes-dashboard
+
 # Wait for the deployment to complete
 $ watch -n1 --color "juju status --color"
 ```
-
-This will take a few moments, and take the following steps:
-
-- Create the deployment as per usual sidecar charms
-- Create Kubernetes specific resources on the install hook
-- Patch the StatefulSet that Juju deploys to include the ServiceAccount mounts
 
 You should end up with some output like the following:
 
 ```
 ❯ juju status
 Model      Controller  Cloud/Region        Version  SLA          Timestamp
-dashboard  micro       microk8s/localhost  2.9-rc9  unsupported  16:41:02+01:00
+dashboard  micro       microk8s/localhost  2.9.0    unsupported  15:28:05+01:00
 
-App                            Version  Status  Scale  Charm                          Store  Channel  Rev  OS      Address  Message
-jnsgruk-kubernetes-dashboard           active      1  jnsgruk-kubernetes-dashboard  local             0  ubuntu
+App                           Version  Status  Scale  Charm                         Store  Channel  Rev  OS          Address  Message
+jnsgruk-kubernetes-dashboard           active      1  jnsgruk-kubernetes-dashboard  local             1  kubernetes
 
-Unit                              Workload  Agent  Address       Ports  Message
-jnsgruk-kubernetes-dashboard/0*  active    idle   10.1.215.226
+Unit                             Workload  Agent  Address       Ports  Message
+jnsgruk-kubernetes-dashboard/0*  active    idle   10.1.215.204
 ```
 
-You can now visit (using the example above): https://10.1.215.226:8443 and login to the dashboard
+You can now visit (using the example above): https://10.1.215.204:8443 and login to the dashboard. Your browser will display a warning about the certificate being self-signed. You can safely ignore this - the charm will generate a self-signed certificate before starting the Kubernetes Dashboard.
 
-**NOTE**: See known issues, but you won't be able to visit the URL in Chrome. Somewhere the certificates are being generated incorrectly and Chrome will not let you pass -- you can test in Firefox.
+## Development
 
-### Current Limitations/Known Issues
+To contribute to this charm, in addition to the tools listed in the getting started above, you'll need to install [`charmcraft`](https://github.com/canonical/charmcraft):
 
-- The metrics pod usually deployed with the dashboard needs to be charmed seperately (and probably deployed with a bundle alongside this charm)
-- The certficate generated for the dashboard is invalid, Google Chrome will not let you visit the URL by default
-- No unit tests - waiting on support for Sidecar Charms in the Operator Framework ([see issue](https://github.com/canonical/operator/issues/488))
+```bash
+# Install charmcraft from the snap store
+$ sudo snap install charmcraft
+
+# Clone the source code of the charm
+$ git clone https://github.com/jnsgruk/charm-kubernetes-dashboard
+$ cd charm-kubernetes-dashboard
+
+# Build the charm
+$ charmcraft pack
+
+# Deploy
+$ juju deploy ./jnsgruk-kubernetes-dashboard.charm \
+    --resource dashboard-image=kubernetesui/dashboard:v2.2.0 \
+    --resource dashboard-image=kubernetesui/metrics-scraper:v1.0.6
+```
+
+## TODO
+
+- [x] Fix the broken default generated certificates when none are specified
+- [x] Include the metrics scraper container in the deployment
+- [ ] Add support for the ingress relation
+- [ ] Add support for custom TLS certificates from a pre-existing Kubernetes secret
+- [ ] Add some unit testing
+- [ ] Add some functional tests
