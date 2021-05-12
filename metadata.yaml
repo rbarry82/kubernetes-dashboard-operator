@@ -5,9 +5,6 @@ description: |
   Charm to operate the Kubernetes Dashboard
 summary: |
   Charm to operate the Kubernetes Dashboard
-bases:
-  - name: ubuntu
-    channel: 20.04/stable
 
 containers:
   dashboard:
