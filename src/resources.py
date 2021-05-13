@@ -144,6 +144,8 @@ class K8sDashboardResources:
                 )
                 self.auth_api.patch_cluster_role_binding(name=crb["body"].metadata.name, **crb)
 
+        logger.info("Created additional Kubernetes resources")
+
     def delete(self) -> None:
         """Delete all of the Kubernetes resources created by the apply method"""
         # Delete service accounts
@@ -182,6 +184,8 @@ class K8sDashboardResources:
         # Delete Kubernetes cluster role bindings
         for crb in self._clusterrolebindings:
             self.auth_api.delete_cluster_role_binding(name=crb["body"].metadata.name)
+
+        logger.info("Deleted additional Kubernetes resources")
 
     @property
     def dashboard_volumes(self) -> dict:

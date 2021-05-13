@@ -89,6 +89,7 @@ class KubernetesDashboardCharm(CharmBase):
         # Check if the scraper service is already running and start it if not
         if not container.get_service("scraper").is_running():
             container.start("scraper")
+            logger.info("Scraper service started")
 
     def _config_dashboard(self) -> None:
         """Configure Pebble to start the Kubernetes Dashboard"""
@@ -193,6 +194,7 @@ class KubernetesDashboardCharm(CharmBase):
         # Write the generated certificate and key to file
         container.push("/certs/tls.crt", tls.cert)
         container.push("/certs/tls.key", tls.key)
+        logger.info("New self-signed TLS certificate generated for the Kubernetes Dashboard")
 
     @property
     def _statefulset_patched(self) -> bool:
@@ -200,20 +202,17 @@ class KubernetesDashboardCharm(CharmBase):
         # Get an API client
         apps_api = kubernetes.client.AppsV1Api(kubernetes.client.ApiClient())
         # Get the StatefulSet for the deployed application
-        stateful_set = apps_api.read_namespaced_stateful_set(
-            name=self.app.name, namespace=self.model.name
-        )
-        # Check if it has been patched
-        return stateful_set.spec.template.spec.service_account_name == "kubernetes-dashboard"
+        s = apps_api.read_namespaced_stateful_set(name=self.app.name, namespace=self.model.name)
+        # Create a volume mount that we expect to be present after patching the StatefulSet
+        expected = kubernetes.client.V1VolumeMount(mount_path="/tmp", name="tmp-volume-dashboard")
+        return expected in s.spec.template.spec.containers[1].volume_mounts
 
     def _patch_stateful_set(self) -> None:
-        """Patch the StatefulSet created by Juju to include specific
-        ServiceAccount and Secret mounts"""
+        """Patch the StatefulSet created by Juju to include specific ServiceAccount and Secret mounts"""
         self.unit.status = MaintenanceStatus("patching StatefulSet for additional k8s permissions")
         # Get an API client
         api = kubernetes.client.AppsV1Api(kubernetes.client.ApiClient())
         r = resources.K8sDashboardResources(self)
-
         # Read the StatefulSet we're deployed into
         s = api.read_namespaced_stateful_set(name=self.app.name, namespace=self.model.name)
         # Add the required volumes to the StatefulSet spec
@@ -259,4 +258,4 @@ class KubernetesDashboardCharm(CharmBase):
 
 
 if __name__ == "__main__":
-    main(KubernetesDashboardCharm)
+    main(KubernetesDashboardCharm, use_juju_for_storage=True)
