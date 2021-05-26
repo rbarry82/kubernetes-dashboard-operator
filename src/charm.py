@@ -150,7 +150,7 @@ class KubernetesDashboardCharm(CharmBase):
         # TODO: Add "--enable-insecure-login", when relation is made
         return " ".join(cmd)
 
-    def _on_delete_resources_action(self, event):
+    def _on_delete_resources_action(self, event) -> None:
         """Action event handler to remove all extra kubernetes resources"""
         if self._k8s_auth():
             # Remove created Kubernetes resources
@@ -158,7 +158,7 @@ class KubernetesDashboardCharm(CharmBase):
             r.delete()
             event.set_results({"message": "successfully deleted kubernetes resources"})
 
-    def _check_tls_certs(self):
+    def _check_tls_certs(self) -> None:
         """Create a self-signed certificate for the Dashboard if required"""
         # TODO: Add a branch here for if a secret is specified in config
         # Make the directory we'll use for certs if it doesn't exist
@@ -224,7 +224,7 @@ class KubernetesDashboardCharm(CharmBase):
         api.patch_namespaced_stateful_set(name=self.app.name, namespace=self.namespace, body=s)
         logger.info("Patched StatefulSet to include additional volumes and mounts")
 
-    def _k8s_auth(self):
+    def _k8s_auth(self) -> bool:
         """Authenticate to kubernetes."""
         if self._authed:
             return True
@@ -255,7 +255,7 @@ class KubernetesDashboardCharm(CharmBase):
         return True
 
     @property
-    def namespace(self):
+    def namespace(self) -> str:
         with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
             return f.read().strip()
 
