@@ -15,6 +15,7 @@ class K8sDashboardResources:
         self.model = charm.model
         self.app = charm.app
         self.config = charm.config
+        self.namespace = charm.namespace
         # Setup some Kubernetes API clients we'll need
         kcl = kubernetes.client.ApiClient()
         self.apps_api = kubernetes.client.AppsV1Api(kcl)
@@ -192,7 +193,7 @@ class K8sDashboardResources:
         """Returns the additional volumes required by the Dashboard"""
         # Get the service account details so we can reference it's token
         service_account = self.core_api.read_namespaced_service_account(
-            name="kubernetes-dashboard", namespace=self.model.name
+            name="kubernetes-dashboard", namespace=self.namespace
         )
         return [
             kubernetes.client.V1Volume(
@@ -247,11 +248,11 @@ class K8sDashboardResources:
         """Return a dictionary containing parameters for the dashboard svc account"""
         return [
             {
-                "namespace": self.model.name,
+                "namespace": self.namespace,
                 "body": kubernetes.client.V1ServiceAccount(
                     api_version="v1",
                     metadata=kubernetes.client.V1ObjectMeta(
-                        namespace=self.model.name,
+                        namespace=self.namespace,
                         name="kubernetes-dashboard",
                         labels={"app.kubernetes.io/name": self.app.name},
                     ),
@@ -264,11 +265,11 @@ class K8sDashboardResources:
         """Return a list of secrets needed by the Kubernetes Dashboard"""
         return [
             {
-                "namespace": self.model.name,
+                "namespace": self.namespace,
                 "body": kubernetes.client.V1Secret(
                     api_version="v1",
                     metadata=kubernetes.client.V1ObjectMeta(
-                        namespace=self.model.name,
+                        namespace=self.namespace,
                         name="kubernetes-dashboard-key-holder",
                         labels={"app.kubernetes.io/name": self.app.name},
                     ),
@@ -276,11 +277,11 @@ class K8sDashboardResources:
                 ),
             },
             {
-                "namespace": self.model.name,
+                "namespace": self.namespace,
                 "body": kubernetes.client.V1Secret(
                     api_version="v1",
                     metadata=kubernetes.client.V1ObjectMeta(
-                        namespace=self.model.name,
+                        namespace=self.namespace,
                         name="kubernetes-dashboard-csrf",
                         labels={"app.kubernetes.io/name": self.app.name},
                     ),
@@ -289,11 +290,11 @@ class K8sDashboardResources:
                 ),
             },
             # {
-            #     "namespace": self.model.name,
+            #     "namespace": self.namespace,
             #     "body": kubernetes.client.V1Secret(
             #         api_version="v1",
             #         metadata=kubernetes.client.V1ObjectMeta(
-            #             namespace=self.model.name,
+            #             namespace=self.namespace,
             #             name="kubernetes-dashboard-certs",
             #             labels={"app.kubernetes.io/name": self.app.name},
             #         ),
@@ -311,11 +312,11 @@ class K8sDashboardResources:
 
         return [
             {
-                "namespace": self.model.name,
+                "namespace": self.namespace,
                 "body": kubernetes.client.V1Service(
                     api_version="v1",
                     metadata=kubernetes.client.V1ObjectMeta(
-                        namespace=self.model.name,
+                        namespace=self.namespace,
                         name=self.app.name,
                         labels={"app.kubernetes.io/name": self.app.name},
                     ),
@@ -337,11 +338,11 @@ class K8sDashboardResources:
                 ),
             },
             {
-                "namespace": self.model.name,
+                "namespace": self.namespace,
                 "body": kubernetes.client.V1Service(
                     api_version="v1",
                     metadata=kubernetes.client.V1ObjectMeta(
-                        namespace=self.model.name,
+                        namespace=self.namespace,
                         name="dashboard-metrics-scraper",
                         labels={"app.kubernetes.io/name": self.app.name},
                     ),
@@ -362,11 +363,11 @@ class K8sDashboardResources:
         """Return a list of ConfigMaps needed by the Kubernetes Dashboard"""
         return [
             {
-                "namespace": self.model.name,
+                "namespace": self.namespace,
                 "body": kubernetes.client.V1ConfigMap(
                     api_version="v1",
                     metadata=kubernetes.client.V1ObjectMeta(
-                        namespace=self.model.name,
+                        namespace=self.namespace,
                         name="kubernetes-dashboard-settings",
                         labels={"app.kubernetes.io/name": self.app.name},
                     ),
@@ -379,11 +380,11 @@ class K8sDashboardResources:
         """Return a list of Roles required by the Kubernetes Dsahboard"""
         return [
             {
-                "namespace": self.model.name,
+                "namespace": self.namespace,
                 "body": kubernetes.client.V1Role(
                     api_version="rbac.authorization.k8s.io/v1",
                     metadata=kubernetes.client.V1ObjectMeta(
-                        namespace=self.model.name,
+                        namespace=self.namespace,
                         name="kubernetes-dashboard",
                         labels={"app.kubernetes.io/name": self.app.name},
                     ),
@@ -435,11 +436,11 @@ class K8sDashboardResources:
         """Return a list of Role Bindings required by the Kubernetes Dsahboard"""
         return [
             {
-                "namespace": self.model.name,
+                "namespace": self.namespace,
                 "body": kubernetes.client.V1RoleBinding(
                     api_version="rbac.authorization.k8s.io/v1",
                     metadata=kubernetes.client.V1ObjectMeta(
-                        namespace=self.model.name,
+                        namespace=self.namespace,
                         name="kubernetes-dashboard",
                         labels={"app.kubernetes.io/name": self.app.name},
                     ),
@@ -452,7 +453,7 @@ class K8sDashboardResources:
                         kubernetes.client.V1Subject(
                             kind="ServiceAccount",
                             name="kubernetes-dashboard",
-                            namespace=self.model.name,
+                            namespace=self.namespace,
                         )
                     ],
                 ),
@@ -502,7 +503,7 @@ class K8sDashboardResources:
                         kubernetes.client.V1Subject(
                             kind="ServiceAccount",
                             name="kubernetes-dashboard",
-                            namespace=self.model.name,
+                            namespace=self.namespace,
                         )
                     ],
                 )

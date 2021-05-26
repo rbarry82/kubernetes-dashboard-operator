@@ -128,7 +128,7 @@ class KubernetesDashboardCharm(CharmBase):
             "/dashboard",
             "--bind-address=0.0.0.0",
             "--sidecar-host=http://localhost:8000",
-            f"--namespace={self.model.name}",
+            f"--namespace={self.namespace}",
         ]
 
         if self.config["bind-insecure"]:
@@ -182,11 +182,11 @@ class KubernetesDashboardCharm(CharmBase):
 
         # If we get this far, the cert is either not present, or invalid
         # Set the FQDN of the certificate
-        fqdn = f"{self.app.name}.{self.model.name}.svc.cluster.local"
+        fqdn = f"{self.app.name}.{self.namespace}.svc.cluster.local"
 
         # Get the service IP for the auto-created kubernetes service
         api = kubernetes.client.CoreV1Api(kubernetes.client.ApiClient())
-        svc = api.read_namespaced_service(name=self.app.name, namespace=self.model.name)
+        svc = api.read_namespaced_service(name=self.app.name, namespace=self.namespace)
         svc_ip = IPv4Address(svc.spec.cluster_ip)
 
         # Generate a valid self-signed certificate, set the Pod IP/Svc IP as SANs
@@ -202,7 +202,7 @@ class KubernetesDashboardCharm(CharmBase):
         # Get an API client
         apps_api = kubernetes.client.AppsV1Api(kubernetes.client.ApiClient())
         # Get the StatefulSet for the deployed application
-        s = apps_api.read_namespaced_stateful_set(name=self.app.name, namespace=self.model.name)
+        s = apps_api.read_namespaced_stateful_set(name=self.app.name, namespace=self.namespace)
         # Create a volume mount that we expect to be present after patching the StatefulSet
         expected = kubernetes.client.V1VolumeMount(mount_path="/tmp", name="tmp-volume-dashboard")
         return expected in s.spec.template.spec.containers[1].volume_mounts
@@ -214,7 +214,7 @@ class KubernetesDashboardCharm(CharmBase):
         api = kubernetes.client.AppsV1Api(kubernetes.client.ApiClient())
         r = resources.K8sDashboardResources(self)
         # Read the StatefulSet we're deployed into
-        s = api.read_namespaced_stateful_set(name=self.app.name, namespace=self.model.name)
+        s = api.read_namespaced_stateful_set(name=self.app.name, namespace=self.namespace)
         # Add the required volumes to the StatefulSet spec
         s.spec.template.spec.volumes.extend(r.dashboard_volumes)
         # Add the required volume mounts to the Dashboard container spec
@@ -223,7 +223,7 @@ class KubernetesDashboardCharm(CharmBase):
         s.spec.template.spec.containers[2].volume_mounts.extend(r.metrics_scraper_volume_mounts)
 
         # Patch the StatefulSet with our modified object
-        api.patch_namespaced_stateful_set(name=self.app.name, namespace=self.model.name, body=s)
+        api.patch_namespaced_stateful_set(name=self.app.name, namespace=self.namespace, body=s)
         logger.info("Patched StatefulSet to include additional volumes and mounts")
 
     def _k8s_auth(self):
@@ -255,6 +255,11 @@ class KubernetesDashboardCharm(CharmBase):
 
         self._authed = True
         return True
+
+    @property
+    def namespace(self):
+        with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
+            return f.read().strip()
 
 
 if __name__ == "__main__":
