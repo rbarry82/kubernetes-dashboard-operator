@@ -8,6 +8,7 @@ import os
 from ipaddress import IPv4Address
 from pathlib import Path
 from subprocess import check_output
+from typing import Optional
 
 from cryptography import x509
 from kubernetes import kubernetes
@@ -159,9 +160,6 @@ class KubernetesDashboardCharm(CharmBase):
 
     def _check_tls_certs(self):
         """Create a self-signed certificate for the Dashboard if required"""
-        # Setup the required FQDN and Pod IP for any cert in use or to be generated
-        pod_ip = IPv4Address(check_output(["unit-get", "private-address"]).decode().strip())
-
         # TODO: Add a branch here for if a secret is specified in config
         # Make the directory we'll use for certs if it doesn't exist
         container = self.unit.get_container("dashboard")
@@ -177,7 +175,7 @@ class KubernetesDashboardCharm(CharmBase):
                 x509.SubjectAlternativeName
             ).value.get_values_for_type(x509.IPAddress)
             # If the cert is valid and pod IP is already in the cert, we're good
-            if pod_ip in cert_san_ips and c.not_valid_after >= datetime.datetime.utcnow():
+            if self.pod_ip in cert_san_ips and c.not_valid_after >= datetime.datetime.utcnow():
                 return
 
         # If we get this far, the cert is either not present, or invalid
@@ -190,7 +188,7 @@ class KubernetesDashboardCharm(CharmBase):
         svc_ip = IPv4Address(svc.spec.cluster_ip)
 
         # Generate a valid self-signed certificate, set the Pod IP/Svc IP as SANs
-        tls = cert.SelfSignedCert([fqdn], [pod_ip, svc_ip])
+        tls = cert.SelfSignedCert([fqdn], [self.pod_ip, svc_ip])
         # Write the generated certificate and key to file
         container.push("/certs/tls.crt", tls.cert)
         container.push("/certs/tls.key", tls.key)
@@ -208,7 +206,7 @@ class KubernetesDashboardCharm(CharmBase):
         return expected in s.spec.template.spec.containers[1].volume_mounts
 
     def _patch_stateful_set(self) -> None:
-        """Patch the StatefulSet created by Juju to include specific ServiceAccount and Secret mounts"""
+        """Patch the StatefulSet to include specific ServiceAccount and Secret mounts"""
         self.unit.status = MaintenanceStatus("patching StatefulSet for additional k8s permissions")
         # Get an API client
         api = kubernetes.client.AppsV1Api(kubernetes.client.ApiClient())
@@ -260,6 +258,10 @@ class KubernetesDashboardCharm(CharmBase):
     def namespace(self):
         with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
             return f.read().strip()
+
+    @property
+    def pod_ip(self) -> Optional[IPv4Address]:
+        return IPv4Address(check_output(["unit-get", "private-address"]).decode().strip())
 
 
 if __name__ == "__main__":
