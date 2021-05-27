@@ -2,3 +2,4 @@ build/
 *.charm
 refresh
 venv/
+*.orig
