@@ -22,6 +22,9 @@ import resources
 
 logger = logging.getLogger(__name__)
 
+# Reduce the log output from the Kubernetes library
+logging.getLogger("kubernetes").setLevel(logging.INFO)
+
 
 class KubernetesDashboardCharm(CharmBase):
     """Charm the service."""
