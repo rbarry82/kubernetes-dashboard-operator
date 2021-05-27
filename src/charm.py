@@ -35,7 +35,6 @@ class KubernetesDashboardCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.stop, self._on_stop)
         self.framework.observe(self.on.delete_resources_action, self._on_delete_resources_action)
@@ -62,10 +61,9 @@ class KubernetesDashboardCharm(CharmBase):
         r = resources.K8sDashboardResources(self)
         r.delete()
 
-    def _on_start(self, event) -> None:
-        """Handle the pebble_ready event for the dashboard container"""
+    def _on_config_changed(self, event) -> None:
         # Defer the config-changed event if we do not have sufficient privileges
-        if not self._k8s_auth():
+        if not self._k8s_auth() or not self._statefulset_patched:
             event.defer()
             return
 
@@ -75,13 +73,6 @@ class KubernetesDashboardCharm(CharmBase):
             self._patch_stateful_set()
             self.unit.status = MaintenanceStatus("waiting for changes to apply")
 
-        self.unit.status = ActiveStatus()
-
-    def _on_config_changed(self, event) -> None:
-        # Defer the config-changed event if we do not have sufficient privileges
-        if not self._k8s_auth() or not self._statefulset_patched:
-            event.defer()
-            return
         # Configure and start the Metrics Scraper
         self._config_scraper()
         # Configure and start the Kubernetes Dashboard
