@@ -12,10 +12,11 @@ from typing import Optional
 
 from cryptography import x509
 from kubernetes import kubernetes
-from ops.charm import CharmBase, InstallEvent, StopEvent
+from ops.charm import CharmBase, InstallEvent, RemoveEvent
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.pebble import ConnectionError
 
 import cert
 import resources
@@ -36,7 +37,7 @@ class KubernetesDashboardCharm(CharmBase):
         super().__init__(*args)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.stop, self._on_stop)
+        self.framework.observe(self.on.remove, self._on_remove)
         self.framework.observe(self.on.delete_resources_action, self._on_delete_resources_action)
 
         self._stored.set_default(dashboard_cmd="")
@@ -51,7 +52,7 @@ class KubernetesDashboardCharm(CharmBase):
         r = resources.K8sDashboardResources(self)
         r.apply()
 
-    def _on_stop(self, event: StopEvent) -> None:
+    def _on_remove(self, event: RemoveEvent) -> None:
         """Cleanup Kubernetes resources"""
         # Authenticate with the Kubernetes API
         if not self._k8s_auth():
@@ -63,7 +64,7 @@ class KubernetesDashboardCharm(CharmBase):
 
     def _on_config_changed(self, event) -> None:
         # Defer the config-changed event if we do not have sufficient privileges
-        if not self._k8s_auth() or not self._statefulset_patched:
+        if not self._k8s_auth():
             event.defer()
             return
 
@@ -73,10 +74,15 @@ class KubernetesDashboardCharm(CharmBase):
             self._patch_stateful_set()
             self.unit.status = MaintenanceStatus("waiting for changes to apply")
 
-        # Configure and start the Metrics Scraper
-        self._config_scraper()
-        # Configure and start the Kubernetes Dashboard
-        self._config_dashboard()
+        try:
+            # Configure and start the Metrics Scraper
+            self._config_scraper()
+            # Configure and start the Kubernetes Dashboard
+            self._config_dashboard()
+        except ConnectionError:
+            logger.info("pebble socket not available, deferring config-changed")
+            event.defer()
+            return
 
         self.unit.status = ActiveStatus()
 
