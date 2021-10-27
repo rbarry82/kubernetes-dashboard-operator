@@ -4,104 +4,100 @@
 
 import datetime
 import logging
-import os
+import traceback
+from glob import glob
 from ipaddress import IPv4Address
-from pathlib import Path
 from subprocess import check_output
 from typing import Optional
 
+from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from cryptography import x509
-from kubernetes import kubernetes
-from ops.charm import CharmBase, InstallEvent, RemoveEvent
+from lightkube import Client, codecs
+from lightkube.core.exceptions import ApiError
+from lightkube.models.core_v1 import (
+    EmptyDirVolumeSource,
+    SecretVolumeSource,
+    ServiceAccount,
+    Volume,
+    VolumeMount,
+)
+from lightkube.resources.apps_v1 import StatefulSet
+from lightkube.resources.core_v1 import Service, ServiceAccount
+from ops.charm import CharmBase, ConfigChangedEvent
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
-from ops.pebble import ConnectionError
 
 import cert
-import resources
 
 logger = logging.getLogger(__name__)
 
-# Reduce the log output from the Kubernetes library
-logging.getLogger("kubernetes").setLevel(logging.INFO)
-
 
 class KubernetesDashboardCharm(CharmBase):
-    """Charm the service."""
+    """Charmed Operator for the Official Kubernetes Dashboard."""
 
-    _authed = False
     _stored = StoredState()
 
     def __init__(self, *args):
         super().__init__(*args)
+        self._stored.set_default(dashboard_cmd="")
+        self._context = {"namespace": self.model.name, "app_name": self.app.name}
+
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.remove, self._on_remove)
-        self.framework.observe(self.on.delete_resources_action, self._on_delete_resources_action)
 
-        self._stored.set_default(dashboard_cmd="")
+        self._service_patcher = KubernetesServicePatch(self, [("dashboard-https", 443, 8443)])
 
-    def _on_install(self, event: InstallEvent) -> None:
-        """Handle the install event, create Kubernetes resources"""
-        if not self._k8s_auth():
-            event.defer()
-            return
+    def _on_install(self, _) -> None:
+        """Handle the install event, create Kubernetes resources."""
         self.unit.status = MaintenanceStatus("creating k8s resources")
-        # Create the Kubernetes resources needed for the Dashboard
-        r = resources.K8sDashboardResources(self)
-        r.apply()
 
-    def _on_remove(self, event: RemoveEvent) -> None:
-        """Cleanup Kubernetes resources"""
-        # Authenticate with the Kubernetes API
-        if not self._k8s_auth():
-            event.defer()
-            return
-        # Remove created Kubernetes resources
-        r = resources.K8sDashboardResources(self)
-        r.delete()
+        try:
+            self._create_kubernetes_resources()
+        except ApiError as e:
+            logger.error(traceback.format_exc())
+            self.unit.status = BlockedStatus(f"Resource creation failed with code {e.status.code}")
+        else:
+            self.unit.status = ActiveStatus()
 
-    def _on_config_changed(self, event) -> None:
-        # Defer the config-changed event if we do not have sufficient privileges
-        if not self._k8s_auth():
-            event.defer()
-            return
-
-        # Default StatefulSet needs patching for extra volume mounts. Ensure that
-        # the StatefulSet is patched on each invocation.
+    def _on_config_changed(self, event: ConfigChangedEvent) -> None:
+        """Handle config-changed event, start services."""
+        # Default StatefulSet needs patching for extra volume mounts.
         if not self._statefulset_patched:
             self._patch_stateful_set()
             self.unit.status = MaintenanceStatus("waiting for changes to apply")
+            event.defer()
+            return
 
-        try:
-            # Configure and start the Metrics Scraper
-            self._config_scraper()
-            # Configure and start the Kubernetes Dashboard
-            self._config_dashboard()
-        except ConnectionError:
+        # Configure and start the Metrics Scraper
+        scraper = self._configure_scraper()
+        # Configure and start the Kubernetes Dashboard
+        dashboard = self._configure_dashboard()
+
+        if not (scraper and dashboard):
             logger.info("pebble socket not available, deferring config-changed")
             event.defer()
             return
 
         self.unit.status = ActiveStatus()
 
-    def _config_scraper(self) -> dict:
-        """Configure Pebble to start the Kubernetes Metrics Scraper"""
+    def _configure_scraper(self) -> bool:
+        """Configure Pebble to start the Kubernetes Metrics Scraper."""
         # Define a simple layer
         layer = {
             "services": {"scraper": {"override": "replace", "command": "/metrics-sidecar"}},
         }
         # Add a Pebble config layer to the scraper container
         container = self.unit.get_container("scraper")
-        container.add_layer("scraper", layer, combine=True)
-        # Check if the scraper service is already running and start it if not
-        if not container.get_service("scraper").is_running():
-            container.start("scraper")
-            logger.info("Scraper service started")
+        if container.can_connect():
+            container.add_layer("scraper", layer, combine=True)
+            container.restart("scraper")
+            return True
+        else:
+            return False
 
-    def _config_dashboard(self) -> None:
-        """Configure Pebble to start the Kubernetes Dashboard"""
+    def _configure_dashboard(self) -> bool:
+        """Configure Pebble to start the Kubernetes Dashboard."""
         # Generate a command for the dashboard
         cmd = self._dashboard_cmd()
         # Check if anything has changed in the layer
@@ -112,62 +108,33 @@ class KubernetesDashboardCharm(CharmBase):
             layer = {
                 "services": {"dashboard": {"override": "replace", "command": cmd}},
             }
-            container.add_layer("dashboard", layer, combine=True)
-            # Store the command used in the StoredState
-            self._stored.dashboard_cmd = cmd
-
-            # Check if the dashboard service is already running and start it if not
-            if container.get_service("dashboard").is_running():
-                container.stop("dashboard")
-                logger.info("Dashboard service stopped")
-
-            # Check if we're running on HTTPS or HTTP
-            if not self.config["bind-insecure"]:
+            if container.can_connect():
+                container.add_layer("dashboard", layer, combine=True)
+                self._stored.dashboard_cmd = cmd
                 # Validate or generate TLS certs
                 self._check_tls_certs()
-
-            logger.debug("Starting Dashboard with command: %s", cmd)
-            container.start("dashboard")
-            logger.info("Dashboard service started")
+                logger.debug("Starting Dashboard with command: %s", cmd)
+                container.restart("dashboard")
+                return True
+            else:
+                return False
 
     def _dashboard_cmd(self) -> str:
-        """Build a command to start the Kubernetes Dashboard based on config"""
+        """Build a command to start the Kubernetes Dashboard based on config."""
         # Base command and arguments
         cmd = [
             "/dashboard",
             "--bind-address=0.0.0.0",
             "--sidecar-host=http://localhost:8000",
             f"--namespace={self.namespace}",
+            "--default-cert-dir=/certs",
+            "--tls-cert-file=tls.crt",
+            "--tls-key-file=tls.key",
         ]
-
-        if self.config["bind-insecure"]:
-            cmd.extend(
-                [
-                    "--insecure-bind-address=0.0.0.0",
-                    "--default-cert-dir=/null",
-                ]
-            )
-        else:
-            cmd.extend(
-                [
-                    "--default-cert-dir=/certs",
-                    "--tls-cert-file=tls.crt",
-                    "--tls-key-file=tls.key",
-                ]
-            )
-        # TODO: Add "--enable-insecure-login", when relation is made
         return " ".join(cmd)
 
-    def _on_delete_resources_action(self, event) -> None:
-        """Action event handler to remove all extra kubernetes resources"""
-        if self._k8s_auth():
-            # Remove created Kubernetes resources
-            r = resources.K8sDashboardResources(self)
-            r.delete()
-            event.set_results({"message": "successfully deleted kubernetes resources"})
-
     def _check_tls_certs(self) -> None:
-        """Create a self-signed certificate for the Dashboard if required"""
+        """Create a self-signed certificate for the Dashboard if required."""
         # TODO: Add a branch here for if a secret is specified in config
         # Make the directory we'll use for certs if it doesn't exist
         container = self.unit.get_container("dashboard")
@@ -191,9 +158,9 @@ class KubernetesDashboardCharm(CharmBase):
         fqdn = f"{self.app.name}.{self.namespace}.svc.cluster.local"
 
         # Get the service IP for the auto-created kubernetes service
-        api = kubernetes.client.CoreV1Api(kubernetes.client.ApiClient())
-        svc = api.read_namespaced_service(name=self.app.name, namespace=self.namespace)
-        svc_ip = IPv4Address(svc.spec.cluster_ip)
+        client = Client()
+        svc: Service = client.get(Service, self.app.name, namespace=self.namespace)
+        svc_ip = IPv4Address(svc.spec.clusterIP)
 
         # Generate a valid self-signed certificate, set the Pod IP/Svc IP as SANs
         tls = cert.SelfSignedCert([fqdn], [self.pod_ip, svc_ip])
@@ -204,71 +171,86 @@ class KubernetesDashboardCharm(CharmBase):
 
     @property
     def _statefulset_patched(self) -> bool:
-        """Slightly naive check to see if the StatefulSet has already been patched"""
-        # Get an API client
-        apps_api = kubernetes.client.AppsV1Api(kubernetes.client.ApiClient())
-        # Get the StatefulSet for the deployed application
-        s = apps_api.read_namespaced_stateful_set(name=self.app.name, namespace=self.namespace)
-        # Create a volume mount that we expect to be present after patching the StatefulSet
-        expected = kubernetes.client.V1VolumeMount(mount_path="/tmp", name="tmp-volume-dashboard")
-        return expected in s.spec.template.spec.containers[1].volume_mounts
+        """Slightly naive check to see if the StatefulSet has already been patched."""
+        client = Client()
+        s: StatefulSet = client.get(StatefulSet, name=self.app.name, namespace=self.namespace)
+        expected = VolumeMount(mountPath="/tmp", name="tmp-volume-dashboard")
+        return expected in s.spec.template.spec.containers[1].volumeMounts
 
     def _patch_stateful_set(self) -> None:
-        """Patch the StatefulSet to include specific ServiceAccount and Secret mounts"""
+        """Patch the StatefulSet to include specific ServiceAccount and Secret mounts."""
         self.unit.status = MaintenanceStatus("patching StatefulSet for additional k8s permissions")
         # Get an API client
-        api = kubernetes.client.AppsV1Api(kubernetes.client.ApiClient())
-        r = resources.K8sDashboardResources(self)
-        # Read the StatefulSet we're deployed into
-        s = api.read_namespaced_stateful_set(name=self.app.name, namespace=self.namespace)
+        client = Client()
+        s: StatefulSet = client.get(StatefulSet, name=self.app.name, namespace=self.namespace)
         # Add the required volumes to the StatefulSet spec
-        s.spec.template.spec.volumes.extend(r.dashboard_volumes)
+        s.spec.template.spec.volumes.extend(self._dashboard_volumes)
         # Add the required volume mounts to the Dashboard container spec
-        s.spec.template.spec.containers[1].volume_mounts.extend(r.dashboard_volume_mounts)
+        s.spec.template.spec.containers[1].volumeMounts.extend(self._dashboard_volume_mounts)
         # Add the required volume mounts to the Scraper container spec
-        s.spec.template.spec.containers[2].volume_mounts.extend(r.metrics_scraper_volume_mounts)
-
+        s.spec.template.spec.containers[2].volumeMounts.extend(self._metrics_scraper_volume_mounts)
         # Patch the StatefulSet with our modified object
-        api.patch_namespaced_stateful_set(name=self.app.name, namespace=self.namespace, body=s)
+        client.patch(StatefulSet, name=self.app.name, obj=s)
         logger.info("Patched StatefulSet to include additional volumes and mounts")
 
-    def _k8s_auth(self) -> bool:
-        """Authenticate to kubernetes."""
-        if self._authed:
-            return True
-        # Remove os.environ.update when lp:1892255 is FIX_RELEASED.
-        os.environ.update(
-            dict(
-                e.split("=")
-                for e in Path("/proc/1/environ").read_text().split("\x00")
-                if "KUBERNETES_SERVICE" in e
-            )
-        )
-        # Authenticate against the Kubernetes API using a mounted ServiceAccount token
-        kubernetes.config.load_incluster_config()
-        # Test the service account we've got for sufficient perms
-        auth_api = kubernetes.client.RbacAuthorizationV1Api(kubernetes.client.ApiClient())
+    @property
+    def _dashboard_volumes(self) -> dict:
+        """Returns the additional volumes required by the Dashboard."""
+        client = Client()
+        # Get the service account details so we can reference it's token
+        sa = client.get(ServiceAccount, name="kubernetes-dashboard", namespace=self.namespace)
+        return [
+            Volume(
+                name="kubernetes-dashboard-service-account",
+                secret=SecretVolumeSource(secretName=sa.secrets[0].name),
+            ),
+            Volume(name="tmp-volume-metrics", emptyDir=EmptyDirVolumeSource(medium="Memory")),
+            Volume(name="tmp-volume-dashboard", emptyDir=EmptyDirVolumeSource()),
+        ]
 
-        try:
-            auth_api.list_cluster_role()
-        except kubernetes.client.exceptions.ApiException as e:
-            if e.status == 403:
-                # If we can't read a cluster role, we don't have enough permissions
-                self.unit.status = BlockedStatus("Run juju trust on this application to continue")
-                return False
-            else:
-                raise e
+    @property
+    def _dashboard_volume_mounts(self) -> dict:
+        """Returns the additional volume mounts for the dashboard containers."""
+        return [
+            VolumeMount(mountPath="/tmp", name="tmp-volume-dashboard"),
+            VolumeMount(
+                mountPath="/var/run/secrets/kubernetes.io/serviceaccount",
+                name="kubernetes-dashboard-service-account",
+            ),
+        ]
 
-        self._authed = True
-        return True
+    @property
+    def _metrics_scraper_volume_mounts(self) -> dict:
+        """Returns the additional volume mounts for the scraper containers."""
+        return [
+            VolumeMount(mountPath="/tmp", name="tmp-volume-metrics"),
+            VolumeMount(
+                mountPath="/var/run/secrets/kubernetes.io/serviceaccount",
+                name="kubernetes-dashboard-service-account",
+            ),
+        ]
+
+    def _create_kubernetes_resources(self):
+        """Iterates over manifests in the templates directory and applies them to the cluster."""
+        client = Client()
+        for manifest in glob("src/templates/*.yaml.j2"):
+            with open(manifest) as f:
+                for resource in codecs.load_all_yaml(f, context=self._context):
+                    try:
+                        client.create(resource)
+                    except ApiError:
+                        logger.debug(f"Failed to create resource: {resource.to_dict()}")
+                        raise
 
     @property
     def namespace(self) -> str:
+        """Return the current Kubernetes namespace."""
         with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r") as f:
             return f.read().strip()
 
     @property
     def pod_ip(self) -> Optional[IPv4Address]:
+        """Get the IP address of the Kubernetes pod."""
         return IPv4Address(check_output(["unit-get", "private-address"]).decode().strip())
 
 

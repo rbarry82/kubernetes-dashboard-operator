@@ -1,3 +1,5 @@
 git+https://github.com/canonical/operator/#egg=ops
-kubernetes
 cryptography
+lightkube<=0.8.1
+lightkube-models
+jinja2<3.1
