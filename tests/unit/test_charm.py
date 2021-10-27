@@ -51,6 +51,7 @@ class _FakeApiError(ApiError):
         super().__init__(response=_FakeResponse(code))
 
 
+@patch("lightkube.core.client.GenericSyncClient", Mock)
 class TestCharm(unittest.TestCase):
     @patch("charm.KubernetesServicePatch", lambda x, y: None)
     @patch("charm.KubernetesDashboardCharm._namespace", "dashboard")
