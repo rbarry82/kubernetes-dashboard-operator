@@ -15,6 +15,7 @@ class SelfSignedCert:
 
     def __init__(
         self,
+        *,
         names: List[str],
         ips: List[IPv4Address] = [],
         key_size: int = 2048,
