@@ -2,6 +2,8 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""Charmed Operator for the Official Kubernetes Dashboard."""
+
 import datetime
 import logging
 import traceback
@@ -17,7 +19,6 @@ from lightkube.core.exceptions import ApiError
 from lightkube.models.core_v1 import (
     EmptyDirVolumeSource,
     SecretVolumeSource,
-    ServiceAccount,
     Volume,
     VolumeMount,
 )
@@ -54,7 +55,7 @@ class KubernetesDashboardCharm(CharmBase):
 
         try:
             self._create_kubernetes_resources()
-        except ApiError as e:
+        except ApiError:
             logger.error(traceback.format_exc())
             self.unit.status = BlockedStatus("kubernetes resource creation failed")
         else:

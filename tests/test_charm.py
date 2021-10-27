@@ -1,10 +1,11 @@
-# Copyright 2021 Canonical
+# Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 import unittest
 from unittest.mock import Mock
 
 from ops.testing import Harness
+
 from charm import KubernetesDashboardCharm
 
 

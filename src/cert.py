@@ -1,5 +1,8 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
+
+"""A simple library for for generating self-signed RSA TLS certificates."""
+
 import datetime
 from ipaddress import IPv4Address
 from typing import List
@@ -11,7 +14,7 @@ from cryptography.x509.oid import NameOID
 
 
 class SelfSignedCert:
-    """A class used for generating self-signed RSA TLS certificates"""
+    """A class used for generating self-signed RSA TLS certificates."""
 
     def __init__(
         self,
@@ -36,7 +39,6 @@ class SelfSignedCert:
             ValueError: is raised if an empty list of names is provided to the
                 constructor.
         """
-
         # Ensure that at least one FQDN was provided
         # TODO: Do some validation on any provided names
         if not names:
@@ -55,7 +57,7 @@ class SelfSignedCert:
         self._generate()
 
     def _generate(self) -> None:
-        """Generate a self-signed certificate"""
+        """Generate a self-signed certificate."""
         # Generate a new RSA private key
         key = rsa.generate_private_key(public_exponent=65537, key_size=self.key_size)
         # Set the subject/issuer to the first of the given names
