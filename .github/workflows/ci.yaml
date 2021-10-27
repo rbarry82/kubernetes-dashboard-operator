@@ -32,5 +32,5 @@ jobs:
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: microk8s
-      - name: Run alertmanger tests
+      - name: Run integration tests
         run: tox -vve integration

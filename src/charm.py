@@ -24,14 +24,16 @@ from lightkube.models.core_v1 import (
 )
 from lightkube.resources.apps_v1 import StatefulSet
 from lightkube.resources.core_v1 import Service, ServiceAccount
-from ops.charm import CharmBase, ConfigChangedEvent
+from ops.charm import CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.pebble import ChangeError
 
 import cert
 
 logger = logging.getLogger(__name__)
+print(__name__)
 
 
 class KubernetesDashboardCharm(CharmBase):
@@ -42,10 +44,11 @@ class KubernetesDashboardCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._stored.set_default(dashboard_cmd="")
-        self._context = {"namespace": self.model.name, "app_name": self.app.name}
+        self._context = {"namespace": self._namespace, "app_name": self.app.name}
 
         self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.dashboard_pebble_ready, self._dashboard_pebble_ready)
+        self.framework.observe(self.on.scraper_pebble_ready, self._scraper_pebble_ready)
 
         self._service_patcher = KubernetesServicePatch(self, [("dashboard-https", 443, 8443)])
 
@@ -58,31 +61,25 @@ class KubernetesDashboardCharm(CharmBase):
         except ApiError:
             logger.error(traceback.format_exc())
             self.unit.status = BlockedStatus("kubernetes resource creation failed")
-        else:
-            self.unit.status = ActiveStatus()
 
-    def _on_config_changed(self, event: ConfigChangedEvent) -> None:
+    def _dashboard_pebble_ready(self, event: WorkloadEvent) -> None:
         """Handle config-changed event, start services."""
         # Default StatefulSet needs patching for extra volume mounts.
         if not self._statefulset_patched:
             self._patch_stateful_set()
             self.unit.status = MaintenanceStatus("waiting for changes to apply")
-            event.defer()
             return
 
-        # Configure and start the Metrics Scraper
-        scraper = self._configure_scraper()
-        # Configure and start the Kubernetes Dashboard
-        dashboard = self._configure_dashboard()
-
-        if not (scraper and dashboard):
-            logger.info("pebble socket not available, deferring config-changed.")
+        # Configure and start the dashboard
+        if not self._configure_dashboard():
+            logger.info("pebble socket not available, deferring config-changed dashboard start.")
+            self.unit.status = WaitingStatus("waiting for pebble socket")
             event.defer()
             return
 
         self.unit.status = ActiveStatus()
 
-    def _configure_scraper(self) -> bool:
+    def _scraper_pebble_ready(self, _) -> None:
         """Configure Pebble to start the Kubernetes Metrics Scraper."""
         # Define a simple layer
         layer = {
@@ -90,17 +87,16 @@ class KubernetesDashboardCharm(CharmBase):
         }
         # Add a Pebble config layer to the scraper container
         container = self.unit.get_container("scraper")
-        if container.can_connect():
-            container.add_layer("scraper", layer, combine=True)
-            container.restart("scraper")
-            return True
-        else:
-            return False
+        container.add_layer("scraper", layer, combine=True)
+        try:
+            container.start("scraper")
+        except ChangeError:
+            logger.warning("unable to start scraper service, container may be restarting.")
 
     def _configure_dashboard(self) -> bool:
         """Configure Pebble to start the Kubernetes Dashboard."""
         # Generate a command for the dashboard
-        cmd = self._dashboard_cmd()
+        cmd = self._dashboard_cmd
         # Check if anything has changed in the layer
         if cmd != self._stored.dashboard_cmd:
             # Add a Pebble config layer to the dashboard container
@@ -118,7 +114,9 @@ class KubernetesDashboardCharm(CharmBase):
                 return True
             else:
                 return False
+        return True
 
+    @property
     def _dashboard_cmd(self) -> str:
         """Build a command to start the Kubernetes Dashboard based on config."""
         cmd = [
@@ -193,7 +191,7 @@ class KubernetesDashboardCharm(CharmBase):
     def _validate_certificate(self, file: Union[BinaryIO, TextIO]) -> bool:
         """Ensure a given certificate contains the correct SANs and is valid temporally."""
         # Create an x509 Certificate object with the contents of the file
-        c = x509.load_pem_x509_certificate(file.read().encode())
+        c = x509.load_pem_x509_certificate(file.read())
         # Get the list of IP Addresses in the SAN field
         cert_san_ips = c.extensions.get_extension_for_class(
             x509.SubjectAlternativeName
@@ -260,5 +258,5 @@ class KubernetesDashboardCharm(CharmBase):
         return IPv4Address(check_output(["unit-get", "private-address"]).decode().strip())
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: nocover
     main(KubernetesDashboardCharm, use_juju_for_storage=True)

@@ -3,7 +3,6 @@
 # See LICENSE file for licensing details.
 
 
-import json
 import logging
 import ssl
 import urllib.request
@@ -46,7 +45,7 @@ async def test_build_and_deploy(ops_test):
 @pytest.mark.abort_on_fail
 async def test_dashboard_is_up(ops_test):
     status = await ops_test.model.get_status()  # noqa: F821
-    address = status["applications"]["dashboard"]["units"][f"dashboard/0"]["address"]
+    address = status["applications"]["dashboard"]["units"]["dashboard/0"]["address"]
 
     url = f"https://{address}:8443"
     logger.info("dashboard public address: https://%s", url)
