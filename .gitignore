@@ -3,3 +3,6 @@ build/
 refresh
 venv/
 *.orig
+.coverage
+**/__pycache__/
+.tox
