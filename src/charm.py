@@ -29,12 +29,11 @@ from ops.charm import CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import ChangeError
+from ops.pebble import APIError, ChangeError, ConnectionError
 
 import cert
 
 logger = logging.getLogger(__name__)
-print(__name__)
 
 
 class KubernetesDashboardCharm(CharmBase):
@@ -80,20 +79,20 @@ class KubernetesDashboardCharm(CharmBase):
 
         self.unit.status = ActiveStatus()
 
-    def _scraper_pebble_ready(self, _) -> None:
+    def _scraper_pebble_ready(self, event: WorkloadEvent) -> None:
         """Configure Pebble to start the Kubernetes Metrics Scraper."""
         # Define a simple layer
         layer = {
             "services": {"scraper": {"override": "replace", "command": "/metrics-sidecar"}},
         }
         # Add a Pebble config layer to the scraper container
-        container = self.unit.get_container("scraper")
-        container.add_layer("scraper", layer, combine=True)
+        container = event.workload
         try:
+            container.add_layer("scraper", layer, combine=True)
             container.start("scraper")
-        except ChangeError:
-            logger.warning("unable to start scraper service, container may be restarting.")
-        except FileNotFoundError:
+        except (ChangeError, ConnectionError, APIError, FileNotFoundError):
+            # This event can often fire very close to the point where the StatefulSet is being
+            # recreated due to the patching. This attempts to catch those errors.
             logger.warning("unable to start scraper service, container may be restarting.")
 
     def _configure_dashboard(self) -> bool:

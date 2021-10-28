@@ -56,8 +56,8 @@ juju add-model dashboard
 juju model-config logging-config="<root>=INFO;unit=DEBUG"
 # Deploy the charm
 juju deploy --trust ./jnsgruk-kubernetes-dashboard_ubuntu-20.04-amd64.charm \
-  --resource dashboard-image=kubernetesui/dashboard:v2.2.0 \
-  --resource scraper-image=kubernetesui/metrics-scraper:v1.0.6
+  --resource dashboard-image=kubernetesui/dashboard:v2.4.0 \
+  --resource scraper-image=kubernetesui/metrics-scraper:v1.0.7
 ```
 
 If, for some reason the charm fails to clean up the Kubernetes resources it creates, they can be

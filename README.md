@@ -36,6 +36,6 @@ at: https://jnsgruk-kubernetes-dashboard-0.dashboard.svc.cluster.local.
 The charm requires the use of two OCI images, one for the dashboard, and one for the metrics
 scaper.
 
-- The dashboard image is [kubernetesui/dashboard](https://hub.docker.com/r/kubernetesui/dashboard)
+- The dashboard image is [kubernetesui/dashboard:v2.4.0](https://hub.docker.com/r/kubernetesui/dashboard)
 - The metrics scraper image is
-  [kubernetesui/metrics-scraper](https://hub.docker.com/r/kubernetesui/metrics-scraper)
+  [kubernetesui/metrics-scraper:v1.0.7](https://hub.docker.com/r/kubernetesui/metrics-scraper)
