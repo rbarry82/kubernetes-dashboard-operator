@@ -382,7 +382,25 @@ class TestCharm(unittest.TestCase):
         result = self.harness.charm._validate_certificate(c)
         self.assertFalse(result)
 
-        # TODO: Fashion a test for time expired certificates
+        # Test a certificate with correct names/ips but time expired
+        expired_pem = [
+            "-----BEGIN CERTIFICATE-----",
+            "MIICCjCCAXOgAwIBAgIUHF55GZlSOf5XvIdrTzN9is1QCx0wDQYJKoZIhvcNAQEL",
+            "BQAwGDEWMBQGA1UEAwwNZGFzaGJvYXJkLmRldjAeFw0yMDEwMjgwODUwMDlaFw0y",
+            "MTEwMTgwODUwMDlaMBgxFjAUBgNVBAMMDWRhc2hib2FyZC5kZXYwgZ8wDQYJKoZI",
+            "hvcNAQEBBQADgY0AMIGJAoGBANEQnwdeU3YeX6tnaUJP14g1c2ONXIwlYEbLCSP4",
+            "Eqmla7aXW+A3w+heo9xv8lx1sNWnUcevEmg2QJ9q45s9JJvDV9groSXztykdmmVd",
+            "SsL4fqsMvg/BhHTYsj9JB6HyAGN0kvVFvX0MmDBJaaf2qwjO6rrN7P9ceNOCLmkC",
+            "5NeZAgMBAAGjUTBPMB4GA1UdEQQXMBWCDWRhc2hib2FyZC5kZXaHBAoKCgowDgYD",
+            "VR0PAQH/BAQDAgWgMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjANBgkq",
+            "hkiG9w0BAQsFAAOBgQBh+8pq4ZJ42D05HBgoUh0m3B3DxzR04hCtQ68HC7IqxNkX",
+            "uJD0mSzY8p4lmmvHQ747hbqGyI47mnjrDTQgcf72H1hD9fYe650+96kBcK49/cFT",
+            "3y2G8SHwBtDlU0SSnc2SSqggsgvHw7ZiOPi7fp6WBenAL+JQ8mxAFuCt0ueGNw==",
+            "-----END CERTIFICATE-----",
+        ]
+        c = x509.load_pem_x509_certificate("\n".join(expired_pem).encode())
+        result = self.harness.charm._validate_certificate(c)
+        self.assertFalse(result)
 
     @patch("charm.check_output", lambda x: b"10.10.10.10\n")
     def test_property_pod_ip(self):
