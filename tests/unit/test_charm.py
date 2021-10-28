@@ -4,9 +4,8 @@
 
 import unittest
 from glob import glob
-from io import BufferedReader, BytesIO
+from io import BytesIO
 from ipaddress import IPv4Address
-from pathlib import Path
 from unittest.mock import MagicMock, Mock, PropertyMock, mock_open, patch
 
 import lightkube

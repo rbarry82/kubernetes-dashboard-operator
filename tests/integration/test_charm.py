@@ -10,6 +10,15 @@ from pathlib import Path
 
 import pytest
 import yaml
+from lightkube import Client
+from lightkube.resources.core_v1 import ConfigMap, Secret, Service, ServiceAccount
+from lightkube.resources.rbac_authorization_v1 import (
+    ClusterRole,
+    ClusterRoleBinding,
+    Role,
+    RoleBinding,
+)
+from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +26,7 @@ METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 
 
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test):
+async def test_build_and_deploy(ops_test: OpsTest):
     """Build the charm-under-test and deploy it together with related charms.
 
     Assert on the unit status before any relations/configurations take place.
@@ -43,7 +52,23 @@ async def test_build_and_deploy(ops_test):
 
 
 @pytest.mark.abort_on_fail
-async def test_dashboard_is_up(ops_test):
+async def test_kubernetes_resources_created(ops_test: OpsTest):
+    client = Client()
+    # A slightly naive test that ensures the relevant Kubernetes resources were created.
+    # If any of these fail, an exception is raised and the test will fail
+    client.get(ClusterRole, name="kubernetes_dashboard")
+    client.get(ClusterRoleBinding, name="kubernetes_dashboard")
+    client.get(ConfigMap, name="kubernetes-dashboard", namespace=ops_test.model_name)
+    client.get(Role, name="kubernetes-dashboard", namespace=ops_test.model_name)
+    client.get(RoleBinding, name="kubernetes-dashboard", namespace=ops_test.model_name)
+    client.get(Secret, name="kubernetes-dashboard-csrf", namespace=ops_test.model_name)
+    client.get(Secret, name="kubernetes-dashboard-key-holder", namespace=ops_test.model_name)
+    client.get(ServiceAccount, name="kubernetes-dashboard", namespace=ops_test.model_name)
+    client.get(Service, name="dashboard-metrics-scraper", namespace=ops_test.model_name)
+
+
+@pytest.mark.abort_on_fail
+async def test_dashboard_is_up(ops_test: OpsTest):
     status = await ops_test.model.get_status()  # noqa: F821
     address = status["applications"]["dashboard"]["units"]["dashboard/0"]["address"]
 

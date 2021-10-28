@@ -9,9 +9,8 @@ import logging
 import traceback
 from glob import glob
 from ipaddress import IPv4Address
-from pathlib import Path
 from subprocess import check_output
-from typing import BinaryIO, List, Optional, TextIO, Union
+from typing import List, Optional
 
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from cryptography import x509
@@ -30,7 +29,7 @@ from ops.charm import CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import ChangeError, ConnectionError
+from ops.pebble import ChangeError
 
 import cert
 
