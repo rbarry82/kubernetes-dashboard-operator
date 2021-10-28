@@ -58,7 +58,7 @@ async def test_kubernetes_resources_created(ops_test: OpsTest):
     # If any of these fail, an exception is raised and the test will fail
     client.get(ClusterRole, name="kubernetes_dashboard")
     client.get(ClusterRoleBinding, name="kubernetes_dashboard")
-    client.get(ConfigMap, name="kubernetes-dashboard", namespace=ops_test.model_name)
+    client.get(ConfigMap, name="kubernetes-dashboard-settings", namespace=ops_test.model_name)
     client.get(Role, name="kubernetes-dashboard", namespace=ops_test.model_name)
     client.get(RoleBinding, name="kubernetes-dashboard", namespace=ops_test.model_name)
     client.get(Secret, name="kubernetes-dashboard-csrf", namespace=ops_test.model_name)
