@@ -4,11 +4,13 @@
 
 import unittest
 from glob import glob
-from io import BytesIO
+from io import BufferedReader, BytesIO
 from ipaddress import IPv4Address
+from pathlib import Path
 from unittest.mock import MagicMock, Mock, PropertyMock, mock_open, patch
 
 import lightkube
+from cryptography import x509
 from lightkube import codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.models.apps_v1 import StatefulSet, StatefulSetSpec
@@ -109,7 +111,7 @@ class TestCharm(unittest.TestCase):
 
     @patch("charm.KubernetesDashboardCharm._configure_dashboard")
     @patch("charm.KubernetesDashboardCharm._statefulset_patched", new_callable=PropertyMock)
-    @patch("charm.KubernetesDashboardCharm._patch_stateful_set", lambda x: False)
+    @patch("charm.KubernetesDashboardCharm._patch_statefulset", lambda x: False)
     def test_dashboard_pebble_ready(self, patched, conf):
         self.assertEqual(self.harness.get_container_pebble_plan("dashboard")._services, {})
 
@@ -150,6 +152,15 @@ class TestCharm(unittest.TestCase):
 
         with patch("ops.model.Container.start") as start:
             start.side_effect = ChangeError("borked", Mock())
+            with self.assertLogs("charm", "WARNING") as logs:
+                self.harness.container_pebble_ready("scraper")
+                self.assertIn(
+                    "unable to start scraper service, container may be restarting.",
+                    ";".join(logs.output),
+                )
+
+        with patch("ops.model.Container.start") as start:
+            start.side_effect = FileNotFoundError()
             with self.assertLogs("charm", "WARNING") as logs:
                 self.harness.container_pebble_ready("scraper")
                 self.assertIn(
@@ -226,17 +237,34 @@ class TestCharm(unittest.TestCase):
         # Test the case where a tls.crt is already present in the container, and is valid
         validate.return_value = True
         list.return_value = [FakeCertFileInfo()]
-        pull.return_value = b"deadbeef"
+
+        pem_lines = [
+            "-----BEGIN CERTIFICATE-----",
+            "MIICAzCCAWygAwIBAgIUTJSwoez33b1TdWe7efN6hx9KTYwwDQYJKoZIhvcNAQEL",
+            "BQAwFTETMBEGA1UEAwwKdGVzdC5sb2NhbDAgFw0yMTEwMjgwODIxMTRaGA8yMjk1",
+            "MDgxMjA4MjExNFowFTETMBEGA1UEAwwKdGVzdC5sb2NhbDCBnzANBgkqhkiG9w0B",
+            "AQEFAAOBjQAwgYkCgYEAspZlj/LXllb/DzaUv2DlqBqezrtn3EXwI5gD0N4yABcB",
+            "YqfYDDdvz+KIUnk2elFYZGUf47ii5RvsM6n6C9IVxM94C7Dt5Diqwd4zJQVxpO0U",
+            "fZ/AA+Qk+ExL+3ZHfIOjlgPIP63en55wOzs4gwptIQlwcrCd0rGNTO2ZLPu4pW0C",
+            "AwEAAaNOMEwwGwYDVR0RBBQwEoIKdGVzdC5sb2NhbIcEAQEBATAOBgNVHQ8BAf8E",
+            "BAMCBaAwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMA0GCSqGSIb3DQEB",
+            "CwUAA4GBAKP//FlwEUT0jPO8VAdhKvz3Zil3XbLHvV9kajtN6G/twfhDiNden7xS",
+            "DSsK9Cg+Jmh5JeHKQ9x++SfMWNbKy+ans/acmdyaiEmj2sP3mB2oHyQkGvwDj+XO",
+            "rFGTuo446/dd8mhlfv55m/NZwut3ZXNVpLoKnYBYEv/qtGgDqCBn",
+            "-----END CERTIFICATE-----",
+        ]
+        pull.return_value = BytesIO("\n".join(pem_lines).encode())
 
         self.harness.charm._configure_tls_certs()
         # Ensure that we try to create a directory for the certificates
         mkdir.assert_called_with("/certs", make_parents=True)
         pull.assert_called_with("/certs/tls.crt")
-        validate.assert_called_with(b"deadbeef")
+        validate.assert_called_with(x509.load_pem_x509_certificate("\n".join(pem_lines).encode()))
         get.assert_not_called()
 
         # Test the case where a tls.crt is already present in the container, and is invalid
         validate.return_value = False
+        pull.return_value = BytesIO("\n".join(pem_lines).encode())
         get.return_value = Service(spec=ServiceSpec(clusterIP="1.1.1.1"))
         self.harness.charm._configure_tls_certs()
         get.assert_called_once()
@@ -283,7 +311,7 @@ class TestCharm(unittest.TestCase):
         get.return_value = initial_statefulset
 
         with self.assertLogs("charm", "INFO") as logs:
-            self.harness.charm._patch_stateful_set()
+            self.harness.charm._patch_statefulset()
             self.assertIn(
                 "patched StatefulSet to include additional volumes and mounts.",
                 ";".join(logs.output),
@@ -344,12 +372,14 @@ class TestCharm(unittest.TestCase):
     @patch("charm.KubernetesDashboardCharm._pod_ip", IPv4Address("10.10.10.10"))
     def test_validate_certificates(self):
         certificate = SelfSignedCert(names=["dashboard.dev"], ips=[IPv4Address("10.10.10.10")])
-        result = self.harness.charm._validate_certificate(BytesIO(certificate.cert))
+        c = x509.load_pem_x509_certificate(certificate.cert)
+        result = self.harness.charm._validate_certificate(c)
         self.assertTrue(result)
 
         # Test that validity fails when pod ip not in list of SANs
         certificate = SelfSignedCert(names=["dashboard.dev"], ips=[IPv4Address("8.8.8.8")])
-        result = self.harness.charm._validate_certificate(BytesIO(certificate.cert))
+        c = x509.load_pem_x509_certificate(certificate.cert)
+        result = self.harness.charm._validate_certificate(c)
         self.assertFalse(result)
 
         # TODO: Fashion a test for time expired certificates

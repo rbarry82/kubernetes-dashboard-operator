@@ -9,11 +9,13 @@ import logging
 import traceback
 from glob import glob
 from ipaddress import IPv4Address
+from pathlib import Path
 from subprocess import check_output
 from typing import BinaryIO, List, Optional, TextIO, Union
 
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from cryptography import x509
+from cryptography.x509.base import Certificate
 from lightkube import Client, codecs
 from lightkube.core.exceptions import ApiError
 from lightkube.models.core_v1 import (
@@ -28,7 +30,7 @@ from ops.charm import CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import ChangeError
+from ops.pebble import ChangeError, ConnectionError
 
 import cert
 
@@ -66,7 +68,7 @@ class KubernetesDashboardCharm(CharmBase):
         """Handle config-changed event, start services."""
         # Default StatefulSet needs patching for extra volume mounts.
         if not self._statefulset_patched:
-            self._patch_stateful_set()
+            self._patch_statefulset()
             self.unit.status = MaintenanceStatus("waiting for changes to apply")
             return
 
@@ -92,6 +94,8 @@ class KubernetesDashboardCharm(CharmBase):
             container.start("scraper")
         except ChangeError:
             logger.warning("unable to start scraper service, container may be restarting.")
+        except FileNotFoundError:
+            logger.warning("unable to start scraper service, container may be restarting.")
 
     def _configure_dashboard(self) -> bool:
         """Configure Pebble to start the Kubernetes Dashboard."""
@@ -110,7 +114,7 @@ class KubernetesDashboardCharm(CharmBase):
                 self._stored.dashboard_cmd = cmd
                 self._configure_tls_certs()
                 logger.debug("starting Kubernetes Dashboard with command: '%s'.", cmd)
-                container.restart("dashboard")
+                container.start("dashboard")
                 return True
             else:
                 return False
@@ -141,7 +145,9 @@ class KubernetesDashboardCharm(CharmBase):
         if "tls.crt" in [x.name for x in container.list_files("/certs")]:
             # Pull the tls.crt file from the workload container
             cert_bytes = container.pull("/certs/tls.crt")
-            if self._validate_certificate(cert_bytes):
+            # Create an x509 Certificate object with the contents of the file
+            c = x509.load_pem_x509_certificate(cert_bytes.read())
+            if self._validate_certificate(c):
                 return
 
         # If we get this far, the cert is either not present, or invalid
@@ -159,7 +165,7 @@ class KubernetesDashboardCharm(CharmBase):
         container.push("/certs/tls.key", certificate.key)
         logger.info("new self-signed TLS certificate generated for the Kubernetes Dashboard.")
 
-    def _patch_stateful_set(self) -> None:
+    def _patch_statefulset(self) -> None:
         """Patch the StatefulSet to include specific ServiceAccount and Secret mounts."""
         self.unit.status = MaintenanceStatus("patching StatefulSet for additional k8s permissions")
         # Get an API client
@@ -188,10 +194,8 @@ class KubernetesDashboardCharm(CharmBase):
                         raise
         return True
 
-    def _validate_certificate(self, file: Union[BinaryIO, TextIO]) -> bool:
+    def _validate_certificate(self, c: Certificate) -> bool:
         """Ensure a given certificate contains the correct SANs and is valid temporally."""
-        # Create an x509 Certificate object with the contents of the file
-        c = x509.load_pem_x509_certificate(file.read())
         # Get the list of IP Addresses in the SAN field
         cert_san_ips = c.extensions.get_extension_for_class(
             x509.SubjectAlternativeName
