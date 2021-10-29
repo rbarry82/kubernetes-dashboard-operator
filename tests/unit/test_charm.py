@@ -75,39 +75,6 @@ class TestCharm(unittest.TestCase):
             self.harness.charm.unit.status, BlockedStatus("kubernetes resource creation failed")
         )
 
-    @patch("charm.Client.create")
-    @patch("charm.ApiError", _FakeApiError)
-    def test_create_kubernetes_resources(self, client: MagicMock):
-        self.harness.charm._context = {
-            "namespace": "dashboard",
-            "app_name": "jnsgruk-kubernetes-dashboard",
-        }
-
-        result = self.harness.charm._create_kubernetes_resources()
-        self.assertTrue(result)
-
-        # Construct a list of resources that should have been created
-        resources = []
-        for manifest in glob("src/templates/*.yaml.j2"):
-            with open(manifest) as f:
-                resources.extend([r for r in codecs.load_all_yaml(f, self.harness.charm._context)])
-
-        # Ensure that all of the resources in the template directory are created
-        for resource in resources:
-            client.assert_any_call(resource)
-
-        # Ensure that any encountered ApiErrors are raised from the function if encountered
-        client.side_effect = _FakeApiError()
-        with self.assertRaises(ApiError):
-            self.harness.charm._create_kubernetes_resources()
-
-        # Check that when the exception is raised, there is appropriate logging
-        with self.assertLogs("charm", "DEBUG") as logs:
-            try:
-                self.harness.charm._create_kubernetes_resources()
-            except ApiError:
-                self.assertIn("failed to create resource:", ";".join(logs.output))
-
     @patch("charm.KubernetesDashboardCharm._configure_dashboard")
     @patch("charm.KubernetesDashboardCharm._statefulset_patched", new_callable=PropertyMock)
     @patch("charm.KubernetesDashboardCharm._patch_statefulset", lambda x: False)
@@ -368,6 +335,39 @@ class TestCharm(unittest.TestCase):
             namespace="dashboard",
         )
 
+    @patch("charm.Client.create")
+    @patch("charm.ApiError", _FakeApiError)
+    def test_create_kubernetes_resources(self, client: MagicMock):
+        self.harness.charm._context = {
+            "namespace": "dashboard",
+            "app_name": "jnsgruk-kubernetes-dashboard",
+        }
+
+        result = self.harness.charm._create_kubernetes_resources()
+        self.assertTrue(result)
+
+        # Construct a list of resources that should have been created
+        resources = []
+        for manifest in glob("src/templates/*.yaml.j2"):
+            with open(manifest) as f:
+                resources.extend([r for r in codecs.load_all_yaml(f, self.harness.charm._context)])
+
+        # Ensure that all of the resources in the template directory are created
+        for resource in resources:
+            client.assert_any_call(resource)
+
+        # Ensure that any encountered ApiErrors are raised from the function if encountered
+        client.side_effect = _FakeApiError()
+        with self.assertRaises(ApiError):
+            self.harness.charm._create_kubernetes_resources()
+
+        # Check that when the exception is raised, there is appropriate logging
+        with self.assertLogs("charm", "DEBUG") as logs:
+            try:
+                self.harness.charm._create_kubernetes_resources()
+            except ApiError:
+                self.assertIn("failed to create resource:", ";".join(logs.output))
+
     @patch("charm.KubernetesDashboardCharm._pod_ip", IPv4Address("10.10.10.10"))
     def test_validate_certificates(self):
         certificate = SelfSignedCert(names=["dashboard.dev"], ips=[IPv4Address("10.10.10.10")])
@@ -401,14 +401,43 @@ class TestCharm(unittest.TestCase):
         result = self.harness.charm._validate_certificate(c)
         self.assertFalse(result)
 
-    @patch("charm.check_output", lambda x: b"10.10.10.10\n")
-    def test_property_pod_ip(self):
-        self.assertEqual(self.harness.charm._pod_ip, IPv4Address("10.10.10.10"))
+    @patch("charm.Client.get")
+    @patch("charm.KubernetesDashboardCharm._namespace", "dashboard")
+    def test_property_dashboard_volumes(self, client):
+        client.return_value = ServiceAccount(
+            metadata=ObjectMeta(name="kubernetes-dashboard"),
+            secrets=[ObjectReference(name="dashboard-secret")],
+        )
 
-    @patch("builtins.open", new_callable=mock_open, read_data="dashboard")
-    def test_property_namespace(self, mock):
-        self.assertEqual(self.harness.charm._namespace, "dashboard")
-        mock.assert_called_with("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r")
+        expected = [
+            Volume(
+                name="kubernetes-dashboard-service-account",
+                secret=SecretVolumeSource(secretName="dashboard-secret"),
+            ),
+            Volume(name="tmp-volume-metrics", emptyDir=EmptyDirVolumeSource(medium="Memory")),
+            Volume(name="tmp-volume-dashboard", emptyDir=EmptyDirVolumeSource()),
+        ]
+        self.assertEqual(self.harness.charm._dashboard_volumes, expected)
+
+    def test_property_dashboard_volume_mounts(self):
+        expected = [
+            VolumeMount(mountPath="/tmp", name="tmp-volume-dashboard"),
+            VolumeMount(
+                mountPath="/var/run/secrets/kubernetes.io/serviceaccount",
+                name="kubernetes-dashboard-service-account",
+            ),
+        ]
+        self.assertEqual(self.harness.charm._dashboard_volume_mounts, expected)
+
+    def test_property_metrics_scraper_volume_mounts(self):
+        expected = [
+            VolumeMount(mountPath="/tmp", name="tmp-volume-metrics"),
+            VolumeMount(
+                mountPath="/var/run/secrets/kubernetes.io/serviceaccount",
+                name="kubernetes-dashboard-service-account",
+            ),
+        ]
+        self.assertEqual(self.harness.charm._metrics_scraper_volume_mounts, expected)
 
     @patch("charm.Client.get")
     @patch("charm.KubernetesDashboardCharm._namespace", "dashboard")
@@ -440,40 +469,11 @@ class TestCharm(unittest.TestCase):
         expected.spec.template.spec.containers[1].volumeMounts = []
         self.assertFalse(self.harness.charm._statefulset_patched)
 
-    def test_property_metrics_scraper_volume_mounts(self):
-        expected = [
-            VolumeMount(mountPath="/tmp", name="tmp-volume-metrics"),
-            VolumeMount(
-                mountPath="/var/run/secrets/kubernetes.io/serviceaccount",
-                name="kubernetes-dashboard-service-account",
-            ),
-        ]
-        self.assertEqual(self.harness.charm._metrics_scraper_volume_mounts, expected)
+    @patch("builtins.open", new_callable=mock_open, read_data="dashboard")
+    def test_property_namespace(self, mock):
+        self.assertEqual(self.harness.charm._namespace, "dashboard")
+        mock.assert_called_with("/var/run/secrets/kubernetes.io/serviceaccount/namespace", "r")
 
-    def test_property_dashboard_volume_mounts(self):
-        expected = [
-            VolumeMount(mountPath="/tmp", name="tmp-volume-dashboard"),
-            VolumeMount(
-                mountPath="/var/run/secrets/kubernetes.io/serviceaccount",
-                name="kubernetes-dashboard-service-account",
-            ),
-        ]
-        self.assertEqual(self.harness.charm._dashboard_volume_mounts, expected)
-
-    @patch("charm.Client.get")
-    @patch("charm.KubernetesDashboardCharm._namespace", "dashboard")
-    def test_property_dashboard_volumes(self, client):
-        client.return_value = ServiceAccount(
-            metadata=ObjectMeta(name="kubernetes-dashboard"),
-            secrets=[ObjectReference(name="dashboard-secret")],
-        )
-
-        expected = [
-            Volume(
-                name="kubernetes-dashboard-service-account",
-                secret=SecretVolumeSource(secretName="dashboard-secret"),
-            ),
-            Volume(name="tmp-volume-metrics", emptyDir=EmptyDirVolumeSource(medium="Memory")),
-            Volume(name="tmp-volume-dashboard", emptyDir=EmptyDirVolumeSource()),
-        ]
-        self.assertEqual(self.harness.charm._dashboard_volumes, expected)
+    @patch("charm.check_output", lambda x: b"10.10.10.10\n")
+    def test_property_pod_ip(self):
+        self.assertEqual(self.harness.charm._pod_ip, IPv4Address("10.10.10.10"))
