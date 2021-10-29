@@ -55,7 +55,6 @@ class KubernetesDashboardCharm(CharmBase):
     def _on_install(self, _) -> None:
         """Handle the install event, create Kubernetes resources."""
         self.unit.status = MaintenanceStatus("creating kubernetes resources")
-
         try:
             self._create_kubernetes_resources()
         except ApiError:
