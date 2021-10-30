@@ -52,7 +52,7 @@ charmcraft pack
 ```bash
 # Create a model
 juju add-model dashboard
-# Enable DEBUG loggimg
+# Enable DEBUG logging
 juju model-config logging-config="<root>=INFO;unit=DEBUG"
 # Deploy the charm
 juju deploy --trust ./jnsgruk-kubernetes-dashboard_ubuntu-20.04-amd64.charm \
