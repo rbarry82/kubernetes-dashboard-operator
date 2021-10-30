@@ -102,11 +102,11 @@ class KubernetesDashboardCharm(CharmBase):
         if cmd != self._stored.dashboard_cmd:
             # Add a Pebble config layer to the dashboard container
             container = self.unit.get_container("dashboard")
-            # Create a new layer
-            layer = {
-                "services": {"dashboard": {"override": "replace", "command": cmd}},
-            }
             if container.can_connect():
+                # Create a new layer
+                layer = {
+                    "services": {"dashboard": {"override": "replace", "command": cmd}},
+                }
                 container.add_layer("dashboard", layer, combine=True)
                 self._stored.dashboard_cmd = cmd
                 self._configure_tls_certs()
