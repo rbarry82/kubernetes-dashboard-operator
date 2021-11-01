@@ -1,25 +1,62 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""TODO: Add a proper docstring here.
+"""# Self-Signed Certificate Generator
 
-This is a placeholder docstring for this charm library. Docstrings are
-presented on Charmhub and updated whenever you push a new version of the
-library.
+This charm library contains a class `SelfSignedCert` which can be used for generating self-signed
+RSA certificates for use in TLS connections or otherwise. It does not currently provide much
+configurability, apart from the FQDN the certificate should be associated with, a list of IP
+addresses to be present in the Subject Alternative Name (SAN) field, validity and key length.
 
-Complete documentation about creating and documenting libraries can be found 
-in the SDK docs at https://juju.is/docs/sdk/libraries.
+By default, generated certificates are valid for 365 years, and use a 2048-bit key size.
 
-See `charmcraft publish-lib` and `charmcraft fetch-lib` for details of how to
-share and consume charm libraries. They serve to enhance collaboration
-between charmers. Use a charmer's libraries for classes that handle
-integration with their charm.
+## Getting Started
 
-Bear in mind that new revisions of the different major API versions (v0, v1,
-v2 etc) are maintained independently.  You can continue to update v0 and v1
-after you have pushed v3.
+In order to use this library, you will need to fetch the library from Charmhub as normal, but you
+will also need to add a dependency on the `cryptography` package to your charm:
 
-Markdown is supported, following the CommonMark specification.
+```shell
+cd some-charm
+charmcraft fetch-lib charms.jnsgruk_kubernetes_dashboard.v0.cert
+echo <<-EOF >> requirements.txt
+cryptography
+EOF
+```
+
+Once complete, you can import the charm and use it like so (in the most simple form):
+
+```python
+# ...
+from charms.jnsgruk_kubernetes_dashboard.v0.cert import SelfSignedCert
+from ipaddress import IPv4Address
+
+# Generate a certificate
+self_signed_cert = SelfSigned(names=["test-service.dev"], ips=[IPv4Address("10.28.0.20")])
+
+# Bytes representing the certificate in PEM format
+certificate = self_signed_cert.cert
+
+# Bytes representing the private key in PEM/PKCS8 format
+key = self_signed_cert.key
+```
+
+You can also specify the validity period in days, and the required key size. The algorithm is
+always RSA:
+
+```python
+# ...
+from charms.jnsgruk_kubernetes_dashboard.v0.cert import SelfSignedCert
+from ipaddress import IPv4Address
+
+# Generate a certificate
+self_signed_cert = SelfSigned(
+    names=["some_app.my_namespace.svc.cluster.local"], 
+    ips=[IPv4Address("10.41.150.12"), IPv4Address("192.168.0.20")],
+    key_size = 4096,
+    validity = 3650
+)
+```
+
 """
 
 import datetime
@@ -100,8 +137,8 @@ class SelfSignedCert:
             .issuer_name(issuer)
             .public_key(key.public_key())
             .serial_number(x509.random_serial_number())
-            .not_valid_before(datetime.datetime.utcnow())
-            .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=self.validity))
+            .not_valid_before(self._utcnow())
+            .not_valid_after(self._utcnow() + datetime.timedelta(days=self.validity))
             .add_extension(
                 x509.SubjectAlternativeName(self.names + self.ips),
                 critical=False,
@@ -138,3 +175,6 @@ class SelfSignedCert:
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.NoEncryption(),
         )
+
+    def _utcnow(self) -> datetime.datetime:
+        return datetime.datetime.utcnow()
