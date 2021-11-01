@@ -11,7 +11,7 @@ from cryptography import x509
 from cryptography.x509.base import Certificate
 
 MOCK_DATE = datetime(2021, 1, 1, 15, 0, 0)
-LIB = "charms.jnsgruk_kubernetes_dashboard.v0.cert.SelfSignedCert"
+LIB = "charms.jnsgruk_kubernetes_dashboard.v0.cert"
 
 
 def _get_cert_sans(cert: Certificate):
@@ -21,7 +21,7 @@ def _get_cert_sans(cert: Certificate):
 
 
 class TestSelfSignedCertGenerator(unittest.TestCase):
-    @patch(f"{LIB}._utcnow", Mock(return_value=MOCK_DATE))
+    @patch(f"{LIB}.datetime", Mock(utcnow=lambda: MOCK_DATE))
     def test_create_cert_defaults(self):
         cert = SelfSignedCert(
             names=["test.local", "test.my_ns.svc.cluster.local"], ips=[IPv4Address("10.10.10.10")]
@@ -52,7 +52,7 @@ class TestSelfSignedCertGenerator(unittest.TestCase):
         sans = _get_cert_sans(c)
         self.assertEqual(sans, ["test.local"])
 
-    @patch(f"{LIB}._utcnow", Mock(return_value=MOCK_DATE))
+    @patch(f"{LIB}.datetime", Mock(utcnow=lambda: MOCK_DATE))
     def test_cert_validity_and_key_size(self):
         ssc = SelfSignedCert(
             names=["test.local"], ips=[IPv4Address("10.10.10.10")], validity=3650, key_size=4096

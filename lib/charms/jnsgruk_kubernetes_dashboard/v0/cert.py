@@ -59,7 +59,7 @@ self_signed_cert = SelfSigned(
 
 """
 
-import datetime
+from datetime import datetime, timedelta
 from ipaddress import IPv4Address
 from typing import List
 
@@ -76,7 +76,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 
 class SelfSignedCert:
@@ -137,8 +137,8 @@ class SelfSignedCert:
             .issuer_name(issuer)
             .public_key(key.public_key())
             .serial_number(x509.random_serial_number())
-            .not_valid_before(self._utcnow())
-            .not_valid_after(self._utcnow() + datetime.timedelta(days=self.validity))
+            .not_valid_before(datetime.utcnow())
+            .not_valid_after(datetime.utcnow() + timedelta(days=self.validity))
             .add_extension(
                 x509.SubjectAlternativeName(self.names + self.ips),
                 critical=False,
@@ -175,6 +175,3 @@ class SelfSignedCert:
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.NoEncryption(),
         )
-
-    def _utcnow(self) -> datetime.datetime:
-        return datetime.datetime.utcnow()
