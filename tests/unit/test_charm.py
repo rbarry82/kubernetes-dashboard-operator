@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, PropertyMock, mock_open, patch
 
 import lightkube
+from charms.jnsgruk_kubernetes_dashboard.v0.cert import SelfSignedCert
 from cryptography import x509
 from lightkube import codecs
 from lightkube.core.exceptions import ApiError
@@ -32,7 +33,6 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from ops.pebble import APIError, ChangeError, ConnectionError
 from ops.testing import Harness
 
-from cert import SelfSignedCert
 from charm import KubernetesDashboardCharm
 
 CHARM = "charm.KubernetesDashboardCharm"
@@ -222,7 +222,7 @@ class TestCharm(unittest.TestCase):
         pull.assert_called_with("/certs/tls.crt")
         validate.assert_called_with(x509.load_pem_x509_certificate(TEST_CERTIFICATE))
 
-    @patch("cert.SelfSignedCert")
+    @patch("charm.SelfSignedCert")
     @patch("ops.model.Container.push")
     @patch("ops.model.Container.make_dir", Mock(return_value=True))
     @patch("ops.model.Container.list_files", Mock(return_value=[SimpleNamespace(name="tls.crt")]))
@@ -239,7 +239,7 @@ class TestCharm(unittest.TestCase):
         push.assert_any_call("/certs/tls.crt", b"deadbeef")
         push.assert_any_call("/certs/tls.key", b"deadbeef")
 
-    @patch("cert.SelfSignedCert")
+    @patch("charm.SelfSignedCert")
     @patch("ops.model.Container.make_dir", Mock(return_value=True))
     @patch("ops.model.Container.list_files")
     @patch("ops.model.Container.push")

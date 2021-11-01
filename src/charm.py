@@ -12,6 +12,7 @@ from ipaddress import IPv4Address
 from subprocess import check_output
 from typing import List, Optional
 
+from charms.jnsgruk_kubernetes_dashboard.v0.cert import SelfSignedCert
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from cryptography import x509
 from cryptography.x509.base import Certificate
@@ -30,8 +31,6 @@ from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import APIError, ChangeError, ConnectionError
-
-import cert
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +155,7 @@ class KubernetesDashboardCharm(CharmBase):
 
         # Generate a valid self-signed certificate, set the Pod IP/Svc IP as SANs
         fqdn = f"{self.app.name}.{self._namespace}.svc.cluster.local"
-        certificate = cert.SelfSignedCert(names=[fqdn], ips=[self._pod_ip, svc_ip])
+        certificate = SelfSignedCert(names=[fqdn], ips=[self._pod_ip, svc_ip])
         # Write the generated certificate and key to file
         container.push("/certs/tls.crt", certificate.cert)
         container.push("/certs/tls.key", certificate.key)
