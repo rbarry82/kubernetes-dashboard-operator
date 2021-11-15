@@ -17,7 +17,7 @@ The Kubernetes Dashboard Operator may be deployed using the Juju command line as
 
 ```sh
 $ juju add-model dashboard
-$ juju deploy kubernetes-dashboard --trust --channel=edge
+$ juju --trust deploy kubernetes-dashboard
 ```
 
 ## Accessing the Dashboard
