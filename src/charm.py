@@ -142,7 +142,7 @@ class KubernetesDashboardCharm(CharmBase):
             # Pull the tls.crt file from the workload container
             cert_bytes = container.pull("/certs/tls.crt")
             # Create an x509 Certificate object with the contents of the file
-            c = x509.load_pem_x509_certificate(cert_bytes.read())
+            c = x509.load_pem_x509_certificate(bytes(cert_bytes.read()))
             if self._validate_certificate(c):
                 return
 
@@ -180,14 +180,21 @@ class KubernetesDashboardCharm(CharmBase):
     def _create_kubernetes_resources(self) -> bool:
         """Iterates over manifests in the templates directory and applies them to the cluster."""
         client = Client()
+        # create_resources = ["cluster_roles", "config_maps", "secrets", "services"]
+        # for manifest in create_resources:
         for manifest in glob("src/templates/*.yaml.j2"):
+            # with open(f"src/templates/{manifest}.yaml.j2") as f:
             with open(manifest) as f:
                 for resource in codecs.load_all_yaml(f, context=self._context):
                     try:
                         client.create(resource)
-                    except ApiError:
-                        logger.debug("failed to create resource: %s.", str(resource.to_dict()))
-                        raise
+                    except ApiError as e:
+                        if e.status.code == 409:
+                            logger.info("replacing resource: %s.", str(resource.to_dict()))
+                            client.replace(resource)
+                        else:
+                            logger.debug("failed to create resource: %s.", str(resource.to_dict()))
+                            raise
         return True
 
     def _validate_certificate(self, c: Certificate) -> bool:

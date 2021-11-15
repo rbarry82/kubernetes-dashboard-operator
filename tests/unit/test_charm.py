@@ -351,7 +351,7 @@ class TestCharm(unittest.TestCase):
         )
 
     @patch("charm.Client.create")
-    def test_create_kubernetes_resources_success(self, client: MagicMock):
+    def test_create_kubernetes_resources_success(self, create: MagicMock):
         self.charm._context = {
             "namespace": "dashboard",
             "app_name": "kubernetes-dashboard",
@@ -368,7 +368,22 @@ class TestCharm(unittest.TestCase):
 
         # Ensure that all of the resources in the template directory are created
         for resource in resources:
-            client.assert_any_call(resource)
+            create.assert_any_call(resource)
+
+    @patch("charm.Client.create")
+    @patch("charm.Client.replace")
+    def test_create_kubernetes_resources_replacement(self, replace, create):
+        self.charm._context = {
+            "namespace": "dashboard",
+            "app_name": "kubernetes-dashboard",
+        }
+
+        with self.assertLogs("charm", "INFO") as logs:
+            create.side_effect = _FakeApiError(code=409)
+            self.charm._create_kubernetes_resources()
+            self.assertIn("replacing resource:", ";".join(logs.output))
+
+        replace.assert_called()
 
     @patch("charm.Client.create")
     @patch("charm.ApiError", _FakeApiError)
