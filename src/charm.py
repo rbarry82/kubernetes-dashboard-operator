@@ -12,7 +12,7 @@ from ipaddress import IPv4Address
 from subprocess import check_output
 from typing import List, Optional
 
-from charms.jnsgruk_kubernetes_dashboard.v0.cert import SelfSignedCert
+from charms.kubernetes_dashboard.v0.cert import SelfSignedCert
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from cryptography import x509
 from cryptography.x509.base import Certificate

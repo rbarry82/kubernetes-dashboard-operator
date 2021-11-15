@@ -6,12 +6,12 @@ from datetime import datetime, timedelta
 from ipaddress import IPv4Address
 from unittest.mock import Mock, patch
 
-from charms.jnsgruk_kubernetes_dashboard.v0.cert import SelfSignedCert
+from charms.kubernetes_dashboard.v0.cert import SelfSignedCert
 from cryptography import x509
 from cryptography.x509.base import Certificate
 
 MOCK_DATE = datetime(2021, 1, 1, 15, 0, 0)
-LIB = "charms.jnsgruk_kubernetes_dashboard.v0.cert"
+LIB = "charms.kubernetes_dashboard.v0.cert"
 
 
 def _get_cert_sans(cert: Certificate):

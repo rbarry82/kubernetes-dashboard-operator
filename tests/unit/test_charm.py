@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, PropertyMock, mock_open, patch
 
 import lightkube
-from charms.jnsgruk_kubernetes_dashboard.v0.cert import SelfSignedCert
+from charms.kubernetes_dashboard.v0.cert import SelfSignedCert
 from cryptography import x509
 from lightkube import codecs
 from lightkube.core.exceptions import ApiError

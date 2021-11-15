@@ -1,7 +1,7 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""# Self-Signed Certificate Generator
+"""# Self-Signed Certificate Generator.
 
 This charm library contains a class `SelfSignedCert` which can be used for generating self-signed
 RSA certificates for use in TLS connections or otherwise. It does not currently provide much
@@ -17,7 +17,7 @@ will also need to add a dependency on the `cryptography` package to your charm:
 
 ```shell
 cd some-charm
-charmcraft fetch-lib charms.jnsgruk_kubernetes_dashboard.v0.cert
+charmcraft fetch-lib charms.kubernetes_dashboard.v0.cert
 echo <<-EOF >> requirements.txt
 cryptography
 EOF
@@ -27,7 +27,7 @@ Once complete, you can import the charm and use it like so (in the most simple f
 
 ```python
 # ...
-from charms.jnsgruk_kubernetes_dashboard.v0.cert import SelfSignedCert
+from charms.kubernetes_dashboard.v0.cert import SelfSignedCert
 from ipaddress import IPv4Address
 
 # Generate a certificate
@@ -45,18 +45,17 @@ always RSA:
 
 ```python
 # ...
-from charms.jnsgruk_kubernetes_dashboard.v0.cert import SelfSignedCert
+from charms.kubernetes_dashboard.v0.cert import SelfSignedCert
 from ipaddress import IPv4Address
 
 # Generate a certificate
 self_signed_cert = SelfSigned(
-    names=["some_app.my_namespace.svc.cluster.local"], 
+    names=["some_app.my_namespace.svc.cluster.local"],
     ips=[IPv4Address("10.41.150.12"), IPv4Address("192.168.0.20")],
     key_size = 4096,
     validity = 3650
 )
 ```
-
 """
 
 from datetime import datetime, timedelta
@@ -69,14 +68,14 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 # The unique Charmhub library identifier, never change it
-LIBID = "1a247bf6aa8a4e61917e89ebcab1e530"
+LIBID = "6b649bc0040448399cfc718a6fcba24d"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 1
 
 
 class SelfSignedCert:
