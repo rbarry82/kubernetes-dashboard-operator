@@ -6,7 +6,7 @@ This documents explains the processes and practices recommended for contributing
 the Kubernetes Dashboard charm.
 
 - Generally, before developing enhancements to this charm, you should consider [opening an issue
-  ](https://github.com/jnsgruk/charm-kubernetes-dashboard/issues) explaining your use case.
+  ](https://github.com/jnsgruk/kubernetes-dashboard-operator/issues) explaining your use case.
 - If you would like to chat with us about your use-cases or proposed implementation, you can reach
   us at [Canonical Mattermost public channel](https://chat.charmhub.io/charmhub/channels/charm-dev)
   or [Discourse](https://discourse.charmhub.io/). The primary author of this charm is available on
@@ -55,7 +55,7 @@ juju add-model dashboard
 # Enable DEBUG logging
 juju model-config logging-config="<root>=INFO;unit=DEBUG"
 # Deploy the charm
-juju deploy --trust ./jnsgruk-kubernetes-dashboard_ubuntu-20.04-amd64.charm \
+juju deploy --trust ./kubernetes-dashboard_ubuntu-20.04-amd64.charm \
   --resource dashboard-image=kubernetesui/dashboard:v2.4.0 \
   --resource scraper-image=kubernetesui/metrics-scraper:v1.0.7
 ```
@@ -65,8 +65,8 @@ removed as follows:
 
 ```bash
 kubectl -n dashboard delete serviceaccount kubernetes-dashboard
-kubectl -n dashboard delete svc jnsgruk-kubernetes-dashboard
-kubectl -n dashboard delete svc jnsgruk-kubernetes-dashboard-metrics-scraper
+kubectl -n dashboard delete svc kubernetes-dashboard
+kubectl -n dashboard delete svc kubernetes-dashboard-metrics-scraper
 kubectl -n dashboard delete secret kubernetes-dashboard-certs
 kubectl -n dashboard delete secret kubernetes-dashboard-csrf
 kubectl -n dashboard delete secret kubernetes-dashboard-key-holder

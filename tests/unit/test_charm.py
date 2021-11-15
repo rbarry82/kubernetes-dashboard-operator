@@ -233,7 +233,7 @@ class TestCharm(unittest.TestCase):
         cert.return_value = SimpleNamespace(key=b"deadbeef", cert=b"deadbeef")
         self.charm._configure_tls_certs()
         cert.assert_called_with(
-            names=["jnsgruk-kubernetes-dashboard.dashboard.svc.cluster.local"],
+            names=["kubernetes-dashboard.dashboard.svc.cluster.local"],
             ips=[IPv4Address("10.10.10.10"), IPv4Address("1.1.1.1")],
         )
         push.assert_any_call("/certs/tls.crt", b"deadbeef")
@@ -253,7 +253,7 @@ class TestCharm(unittest.TestCase):
         pull.assert_not_called()
         get.assert_called_once()
         cert.assert_called_with(
-            names=["jnsgruk-kubernetes-dashboard.dashboard.svc.cluster.local"],
+            names=["kubernetes-dashboard.dashboard.svc.cluster.local"],
             ips=[IPv4Address("10.10.10.10"), IPv4Address("1.1.1.1")],
         )
         push.assert_any_call("/certs/tls.crt", b"deadbeef")
@@ -345,7 +345,7 @@ class TestCharm(unittest.TestCase):
         )
         patch.assert_called_with(
             lightkube.resources.apps_v1.StatefulSet,
-            name="jnsgruk-kubernetes-dashboard",
+            name="kubernetes-dashboard",
             obj=expected,
             namespace="dashboard",
         )
@@ -354,7 +354,7 @@ class TestCharm(unittest.TestCase):
     def test_create_kubernetes_resources_success(self, client: MagicMock):
         self.charm._context = {
             "namespace": "dashboard",
-            "app_name": "jnsgruk-kubernetes-dashboard",
+            "app_name": "kubernetes-dashboard",
         }
 
         result = self.charm._create_kubernetes_resources()

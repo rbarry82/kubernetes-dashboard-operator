@@ -17,7 +17,7 @@ The Kubernetes Dashboard Operator may be deployed using the Juju command line as
 
 ```sh
 $ juju add-model dashboard
-$ juju deploy jnsgruk-kubernetes-dashboard --trust --channel=edge
+$ juju deploy kubernetes-dashboard --trust --channel=edge
 ```
 
 ## Accessing the Dashboard
@@ -29,7 +29,7 @@ If you deploy and allow the Kubernetes Dashboard to generate its own, self-signe
 certificate will be valid for the service cluster IP, its pod IP and its DNS name in the cluster.
 
 For example, if you deploy into a model named `dashboard`, you'll be able to access the dashboard
-at: https://jnsgruk-kubernetes-dashboard-0.dashboard.svc.cluster.local.
+at: https://kubernetes-dashboard-0.dashboard.svc.cluster.local.
 
 ## OCI Images
 
