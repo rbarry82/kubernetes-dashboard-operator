@@ -4,7 +4,6 @@
 
 import unittest
 from glob import glob
-from io import BytesIO
 from ipaddress import IPv4Address
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, PropertyMock, mock_open, patch
@@ -207,57 +206,42 @@ class TestCharm(unittest.TestCase):
         )
         self.assertEqual(self.charm._dashboard_cmd, expected)
 
-    @patch("ops.model.Container.make_dir")
-    @patch("ops.model.Container.pull")
     @patch(f"{CHARM}._validate_certificate")
-    @patch("ops.model.Container.list_files", Mock(return_value=[SimpleNamespace(name="tls.crt")]))
-    def test_configure_tls_certs_already_present_and_valid(self, validate, pull, mkdir):
+    def test_configure_tls_certs_already_present_and_valid(self, validate):
         validate.return_value = True
-        pull.return_value = BytesIO(TEST_CERTIFICATE)
-
+        container = self.charm.unit.get_container("dashboard")
+        container.push("/certs/tls.crt", TEST_CERTIFICATE, make_dirs=True)
         self.charm._configure_tls_certs()
-
-        # Ensure that we try to create a directory for the certificates
-        mkdir.assert_called_with("/certs", make_parents=True)
-        pull.assert_called_with("/certs/tls.crt")
         validate.assert_called_with(x509.load_pem_x509_certificate(TEST_CERTIFICATE))
 
     @patch("charm.SelfSignedCert")
-    @patch("ops.model.Container.push")
-    @patch("ops.model.Container.make_dir", Mock(return_value=True))
-    @patch("ops.model.Container.list_files", Mock(return_value=[SimpleNamespace(name="tls.crt")]))
-    @patch("ops.model.Container.pull", Mock(return_value=BytesIO(TEST_CERTIFICATE)))
     @patch(f"{CHARM}._validate_certificate", lambda x, y: False)
     @patch("charm.Client.get", Mock(return_value=Service(spec=ServiceSpec(clusterIP="1.1.1.1"))))
-    def test_configure_tls_certs_already_present_and_invalid(self, push, cert):
+    def test_configure_tls_certs_already_present_and_invalid(self, cert):
         cert.return_value = SimpleNamespace(key=b"deadbeef", cert=b"deadbeef")
         self.charm._configure_tls_certs()
         cert.assert_called_with(
             names=["kubernetes-dashboard.dashboard.svc.cluster.local"],
             ips=[IPv4Address("10.10.10.10"), IPv4Address("1.1.1.1")],
         )
-        push.assert_any_call("/certs/tls.crt", b"deadbeef")
-        push.assert_any_call("/certs/tls.key", b"deadbeef")
+        container = self.charm.unit.get_container("dashboard")
+        self.assertEqual(container.pull("/certs/tls.crt").read(), "deadbeef")
+        self.assertEqual(container.pull("/certs/tls.key").read(), "deadbeef")
 
     @patch("charm.SelfSignedCert")
-    @patch("ops.model.Container.make_dir", Mock(return_value=True))
-    @patch("ops.model.Container.list_files")
-    @patch("ops.model.Container.push")
-    @patch("ops.model.Container.pull")
     @patch("charm.Client.get")
-    def test_configure_tls_certs_not_present(self, get, pull, push, list, cert):
+    def test_configure_tls_certs_not_present(self, get, cert):
         cert.return_value = SimpleNamespace(key=b"deadbeef", cert=b"deadbeef")
-        list.return_value = []
         get.return_value = Service(spec=ServiceSpec(clusterIP="1.1.1.1"))
         self.charm._configure_tls_certs()
-        pull.assert_not_called()
         get.assert_called_once()
         cert.assert_called_with(
             names=["kubernetes-dashboard.dashboard.svc.cluster.local"],
             ips=[IPv4Address("10.10.10.10"), IPv4Address("1.1.1.1")],
         )
-        push.assert_any_call("/certs/tls.crt", b"deadbeef")
-        push.assert_any_call("/certs/tls.key", b"deadbeef")
+        container = self.charm.unit.get_container("dashboard")
+        self.assertEqual(container.pull("/certs/tls.crt").read(), "deadbeef")
+        self.assertEqual(container.pull("/certs/tls.key").read(), "deadbeef")
 
     @patch("charm.Client.get")
     @patch("charm.Client.patch")

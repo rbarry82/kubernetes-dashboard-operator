@@ -136,13 +136,12 @@ class KubernetesDashboardCharm(CharmBase):
         # Make the directory we'll use for certs if it doesn't exist
         container = self.unit.get_container("dashboard")
         container.make_dir("/certs", make_parents=True)
-
         # If there is already a 'tls.crt', then check its validity/suitability.
         if "tls.crt" in [x.name for x in container.list_files("/certs")]:
             # Pull the tls.crt file from the workload container
             cert_bytes = container.pull("/certs/tls.crt")
             # Create an x509 Certificate object with the contents of the file
-            c = x509.load_pem_x509_certificate(bytes(cert_bytes.read()))
+            c = x509.load_pem_x509_certificate(bytes(cert_bytes.read(), encoding="utf-8"))
             if self._validate_certificate(c):
                 return
 
@@ -157,8 +156,8 @@ class KubernetesDashboardCharm(CharmBase):
         fqdn = f"{self.app.name}.{self._namespace}.svc.cluster.local"
         certificate = SelfSignedCert(names=[fqdn], ips=[self._pod_ip, svc_ip])
         # Write the generated certificate and key to file
-        container.push("/certs/tls.crt", certificate.cert)
-        container.push("/certs/tls.key", certificate.key)
+        container.push("/certs/tls.crt", certificate.cert, make_dirs=True)
+        container.push("/certs/tls.key", certificate.key, make_dirs=True)
         logger.info("new self-signed TLS certificate generated for the Kubernetes Dashboard.")
 
     def _patch_statefulset(self) -> None:
