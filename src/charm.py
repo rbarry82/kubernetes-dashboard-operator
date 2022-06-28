@@ -18,14 +18,9 @@ from cryptography import x509
 from cryptography.x509.base import Certificate
 from lightkube import Client, codecs
 from lightkube.core.exceptions import ApiError
-from lightkube.models.core_v1 import (
-    EmptyDirVolumeSource,
-    SecretVolumeSource,
-    Volume,
-    VolumeMount,
-)
+from lightkube.models.core_v1 import EmptyDirVolumeSource, Volume, VolumeMount
 from lightkube.resources.apps_v1 import StatefulSet
-from lightkube.resources.core_v1 import Service, ServiceAccount
+from lightkube.resources.core_v1 import Service
 from ops.charm import CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
@@ -210,14 +205,7 @@ class KubernetesDashboardCharm(CharmBase):
     @property
     def _dashboard_volumes(self) -> List[Volume]:
         """Returns the additional volumes required by the Dashboard."""
-        client = Client()
-        # Get the service account details so we can reference it's token
-        sa = client.get(ServiceAccount, name="kubernetes-dashboard", namespace=self._namespace)
         return [
-            Volume(
-                name="kubernetes-dashboard-service-account",
-                secret=SecretVolumeSource(secretName=sa.secrets[0].name),
-            ),
             Volume(name="tmp-volume-metrics", emptyDir=EmptyDirVolumeSource(medium="Memory")),
             Volume(name="tmp-volume-dashboard", emptyDir=EmptyDirVolumeSource()),
         ]
@@ -225,24 +213,12 @@ class KubernetesDashboardCharm(CharmBase):
     @property
     def _dashboard_volume_mounts(self) -> List[VolumeMount]:
         """Returns the additional volume mounts for the dashboard containers."""
-        return [
-            VolumeMount(mountPath="/tmp", name="tmp-volume-dashboard"),
-            VolumeMount(
-                mountPath="/var/run/secrets/kubernetes.io/serviceaccount",
-                name="kubernetes-dashboard-service-account",
-            ),
-        ]
+        return [VolumeMount(mountPath="/tmp", name="tmp-volume-dashboard")]
 
     @property
     def _metrics_scraper_volume_mounts(self) -> List[VolumeMount]:
         """Returns the additional volume mounts for the scraper containers."""
-        return [
-            VolumeMount(mountPath="/tmp", name="tmp-volume-metrics"),
-            VolumeMount(
-                mountPath="/var/run/secrets/kubernetes.io/serviceaccount",
-                name="kubernetes-dashboard-service-account",
-            ),
-        ]
+        return [VolumeMount(mountPath="/tmp", name="tmp-volume-metrics")]
 
     @property
     def _statefulset_patched(self) -> bool:
@@ -265,4 +241,4 @@ class KubernetesDashboardCharm(CharmBase):
 
 
 if __name__ == "__main__":  # pragma: nocover
-    main(KubernetesDashboardCharm, use_juju_for_storage=True)
+    main(KubernetesDashboardCharm)

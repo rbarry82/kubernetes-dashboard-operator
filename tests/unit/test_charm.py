@@ -17,17 +17,14 @@ from lightkube.models.apps_v1 import StatefulSet, StatefulSetSpec
 from lightkube.models.core_v1 import (
     Container,
     EmptyDirVolumeSource,
-    ObjectReference,
     PodSpec,
     PodTemplateSpec,
-    SecretVolumeSource,
     Service,
     ServiceSpec,
     Volume,
     VolumeMount,
 )
 from lightkube.models.meta_v1 import LabelSelector, ObjectMeta
-from lightkube.resources.core_v1 import ServiceAccount
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import APIError, ChangeError, ConnectionError
 from ops.testing import Harness
@@ -82,6 +79,8 @@ class TestCharm(unittest.TestCase):
         self.harness = Harness(KubernetesDashboardCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
+        self.harness.set_can_connect("dashboard", True)
+        self.harness.set_can_connect("scraper", True)
         self.charm = self.harness.charm
 
     @patch(f"{CHARM}._create_kubernetes_resources")
@@ -193,8 +192,8 @@ class TestCharm(unittest.TestCase):
     def test_configure_dashboard_no_pebble_connection(self, certs):
         # Check we return false when the charm cannot connect to pebble
         self.charm._stored.dashboard_cmd = "foobar"
-        with patch("ops.model.Container.can_connect", lambda x: False):
-            result = self.charm._configure_dashboard()
+        self.harness.set_can_connect("dashboard", False)
+        result = self.charm._configure_dashboard()
         self.assertFalse(result)
         certs.assert_not_called()
 
@@ -266,10 +265,6 @@ class TestCharm(unittest.TestCase):
         )
 
         volumes.return_value = [
-            Volume(
-                name="kubernetes-dashboard-service-account",
-                secret=SecretVolumeSource(secretName="dashboard-secret"),
-            ),
             Volume(name="tmp-volume-metrics", emptyDir=EmptyDirVolumeSource(medium="Memory")),
             Volume(name="tmp-volume-dashboard", emptyDir=EmptyDirVolumeSource()),
         ]
@@ -295,28 +290,16 @@ class TestCharm(unittest.TestCase):
                                 name="dashboard",
                                 volumeMounts=[
                                     VolumeMount(mountPath="/tmp", name="tmp-volume-dashboard"),
-                                    VolumeMount(
-                                        mountPath="/var/run/secrets/kubernetes.io/serviceaccount",
-                                        name="kubernetes-dashboard-service-account",
-                                    ),
                                 ],
                             ),
                             Container(
                                 name="scraper",
                                 volumeMounts=[
                                     VolumeMount(mountPath="/tmp", name="tmp-volume-metrics"),
-                                    VolumeMount(
-                                        mountPath="/var/run/secrets/kubernetes.io/serviceaccount",
-                                        name="kubernetes-dashboard-service-account",
-                                    ),
                                 ],
                             ),
                         ],
                         volumes=[
-                            Volume(
-                                name="kubernetes-dashboard-service-account",
-                                secret=SecretVolumeSource(secretName="dashboard-secret"),
-                            ),
                             Volume(
                                 name="tmp-volume-metrics",
                                 emptyDir=EmptyDirVolumeSource(medium="Memory"),
@@ -414,18 +397,8 @@ class TestCharm(unittest.TestCase):
         result = self.charm._validate_certificate(x509.load_pem_x509_certificate(certificate.cert))
         self.assertFalse(result)
 
-    @patch("charm.Client.get")
-    def test_property_dashboard_volumes(self, client):
-        client.return_value = ServiceAccount(
-            metadata=ObjectMeta(name="kubernetes-dashboard"),
-            secrets=[ObjectReference(name="dashboard-secret")],
-        )
-
+    def test_property_dashboard_volumes(self):
         expected = [
-            Volume(
-                name="kubernetes-dashboard-service-account",
-                secret=SecretVolumeSource(secretName="dashboard-secret"),
-            ),
             Volume(name="tmp-volume-metrics", emptyDir=EmptyDirVolumeSource(medium="Memory")),
             Volume(name="tmp-volume-dashboard", emptyDir=EmptyDirVolumeSource()),
         ]
@@ -434,20 +407,12 @@ class TestCharm(unittest.TestCase):
     def test_property_dashboard_volume_mounts(self):
         expected = [
             VolumeMount(mountPath="/tmp", name="tmp-volume-dashboard"),
-            VolumeMount(
-                mountPath="/var/run/secrets/kubernetes.io/serviceaccount",
-                name="kubernetes-dashboard-service-account",
-            ),
         ]
         self.assertEqual(self.charm._dashboard_volume_mounts, expected)
 
     def test_property_metrics_scraper_volume_mounts(self):
         expected = [
             VolumeMount(mountPath="/tmp", name="tmp-volume-metrics"),
-            VolumeMount(
-                mountPath="/var/run/secrets/kubernetes.io/serviceaccount",
-                name="kubernetes-dashboard-service-account",
-            ),
         ]
         self.assertEqual(self.charm._metrics_scraper_volume_mounts, expected)
 

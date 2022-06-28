@@ -11,5 +11,11 @@ bases:
         channel: "20.04"
 parts:
   charm:
+    charm-python-packages: [setuptools, pip]
     build-packages:
       - git
+      # required for installing cffi:
+      - libffi-dev
+      # required for installing cryptography (cargo also contains rust):
+      - cargo
+      - libssl-dev

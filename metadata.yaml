@@ -24,8 +24,8 @@ resources:
   dashboard-image:
     type: oci-image
     description: OCI image for kubernetesui/dashboard
-    upstream-source: kubernetesui/dashboard:v2.4.0
+    upstream-source: kubernetesui/dashboard:v2.6.0
   scraper-image:
     type: oci-image
     description: OCI image for kubernetesui/metrics-scraper
-    upstream-source: kubernetesui/metrics-scraper:v1.0.7
+    upstream-source: kubernetesui/metrics-scraper:v1.0.8
