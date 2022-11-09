@@ -38,7 +38,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
         "scraper-image": METADATA["resources"]["scraper-image"]["upstream-source"],
     }
     await ops_test.model.deploy(
-        charm, resources=resources, application_name="dashboard", trust=True
+        charm, resources=resources, application_name="dashboard", trust=True, series="jammy"
     )
 
     # issuing dummy update_status just to trigger an event
