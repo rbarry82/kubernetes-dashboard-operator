@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, PropertyMock, mock_open, patch
 
 import lightkube
+from charm import KubernetesDashboardCharm
 from charms.kubernetes_dashboard.v0.cert import SelfSignedCert
 from cryptography import x509
 from lightkube import codecs
@@ -28,8 +29,6 @@ from lightkube.models.meta_v1 import LabelSelector, ObjectMeta
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import APIError, ChangeError, ConnectionError
 from ops.testing import Harness
-
-from charm import KubernetesDashboardCharm
 
 CHARM = "charm.KubernetesDashboardCharm"
 
@@ -331,7 +330,7 @@ class TestCharm(unittest.TestCase):
         resources = []
         for manifest in glob("src/templates/*.yaml.j2"):
             with open(manifest) as f:
-                resources.extend([r for r in codecs.load_all_yaml(f, self.charm._context)])
+                resources.extend(list(codecs.load_all_yaml(f, self.charm._context)))
 
         # Ensure that all of the resources in the template directory are created
         for resource in resources:
