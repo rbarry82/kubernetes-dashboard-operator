@@ -1,5 +1,5 @@
-ops >= 1.5.0
-cryptography
-lightkube
-lightkube-models
-jinja2<3.1
+ops==1.5.3
+cryptography==38.0.3
+lightkube==0.11.0
+lightkube-models==1.24.1.4
+Jinja2==3.0.3
