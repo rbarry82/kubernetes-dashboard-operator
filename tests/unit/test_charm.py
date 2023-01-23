@@ -52,7 +52,7 @@ TEST_CERTIFICATE = "\n".join(
 
 
 class _FakeResponse:
-    """Used to fake an httpx response during testing only."""
+    """Fake an httpx response during testing only."""
 
     def __init__(self, code):
         self.code = code
@@ -62,7 +62,7 @@ class _FakeResponse:
 
 
 class _FakeApiError(ApiError):
-    """Used to simulate an ApiError during testing."""
+    """Simulate an ApiError during testing."""
 
     def __init__(self, code=400):
         super().__init__(response=_FakeResponse(code))

@@ -172,7 +172,7 @@ class KubernetesDashboardCharm(CharmBase):
         logger.info("patched StatefulSet to include additional volumes and mounts.")
 
     def _create_kubernetes_resources(self) -> bool:
-        """Iterates over manifests in the templates directory and applies them to the cluster."""
+        """Iterate over manifests in the templates directory and applies them to the cluster."""
         client = Client()
         # create_resources = ["cluster_roles", "config_maps", "secrets", "services"]
         # for manifest in create_resources:
@@ -204,7 +204,7 @@ class KubernetesDashboardCharm(CharmBase):
 
     @property
     def _dashboard_volumes(self) -> List[Volume]:
-        """Returns the additional volumes required by the Dashboard."""
+        """Return the additional volumes required by the Dashboard."""
         return [
             Volume(name="tmp-volume-metrics", emptyDir=EmptyDirVolumeSource(medium="Memory")),
             Volume(name="tmp-volume-dashboard", emptyDir=EmptyDirVolumeSource()),
@@ -212,17 +212,17 @@ class KubernetesDashboardCharm(CharmBase):
 
     @property
     def _dashboard_volume_mounts(self) -> List[VolumeMount]:
-        """Returns the additional volume mounts for the dashboard containers."""
+        """Return the additional volume mounts for the dashboard containers."""
         return [VolumeMount(mountPath="/tmp", name="tmp-volume-dashboard")]
 
     @property
     def _metrics_scraper_volume_mounts(self) -> List[VolumeMount]:
-        """Returns the additional volume mounts for the scraper containers."""
+        """Return the additional volume mounts for the scraper containers."""
         return [VolumeMount(mountPath="/tmp", name="tmp-volume-metrics")]
 
     @property
     def _statefulset_patched(self) -> bool:
-        """Slightly naive check to see if the StatefulSet has already been patched."""
+        """Check if the StatefulSet has already been patched."""
         client = Client()
         s: StatefulSet = client.get(StatefulSet, name=self.app.name, namespace=self._namespace)
         expected = VolumeMount(mountPath="/tmp", name="tmp-volume-dashboard")
