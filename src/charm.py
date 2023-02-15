@@ -6,6 +6,7 @@
 
 import datetime
 import logging
+import os
 import signal
 import traceback
 from glob import glob
@@ -14,7 +15,8 @@ from subprocess import check_output
 from typing import List, Optional
 
 from charms.kubernetes_dashboard.v0.cert import SelfSignedCert
-from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
+from charms.observability_libs.v0.kubernetes_service_patch import \
+    KubernetesServicePatch
 from cryptography import x509
 from cryptography.x509.base import Certificate
 from lightkube import Client, codecs
@@ -25,7 +27,8 @@ from lightkube.resources.core_v1 import Service
 from ops.charm import CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.model import (ActiveStatus, BlockedStatus, MaintenanceStatus,
+                       WaitingStatus)
 from ops.pebble import APIError, ChangeError, ConnectionError
 
 logger = logging.getLogger(__name__)
@@ -241,8 +244,12 @@ class KubernetesDashboardCharm(CharmBase):
         return IPv4Address(check_output(["unit-get", "private-address"]).decode().strip())
 
 
+def _signal_worker(*args) -> None:
+    os.kill(os.getppid(), signal.SIGTERM)
+
+
 if __name__ == "__main__":  # pragma: nocover
     # Work around for the Error state that occurs when the StatefulSet is patched in the
     # pebble-ready hook
-    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, _signal_worker)
     main(KubernetesDashboardCharm)
