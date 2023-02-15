@@ -245,6 +245,7 @@ class KubernetesDashboardCharm(CharmBase):
 
 
 def _signal_worker(*args) -> None:
+    # trigger CI
     os.kill(os.getppid(), signal.SIGTERM)
 
 
