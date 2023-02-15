@@ -15,8 +15,7 @@ from subprocess import check_output
 from typing import List, Optional
 
 from charms.kubernetes_dashboard.v0.cert import SelfSignedCert
-from charms.observability_libs.v0.kubernetes_service_patch import \
-    KubernetesServicePatch
+from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from cryptography import x509
 from cryptography.x509.base import Certificate
 from lightkube import Client, codecs
@@ -27,8 +26,7 @@ from lightkube.resources.core_v1 import Service
 from ops.charm import CharmBase, WorkloadEvent
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import (ActiveStatus, BlockedStatus, MaintenanceStatus,
-                       WaitingStatus)
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import APIError, ChangeError, ConnectionError
 
 logger = logging.getLogger(__name__)
