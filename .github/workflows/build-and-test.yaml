@@ -44,7 +44,7 @@ jobs:
         uses: JarvusInnovations/background-action@v1
         with:
           run: |
-            sudo apt-get update && sudo apt-get -y install bpfcc-tools python3-psutil && ls && sudo python3 src/killsnoop.py &
+            sudo apt-get update && sudo apt-get -y install bpfcc-tools python3-psutil && ls && sudo python3 ${GITHUB_WORKSPACE}/src/killsnoop.py &
           wait-on: |
             file:///tmp/compiled
           tail: true
