@@ -36,6 +36,21 @@ jobs:
       - lint
       - unit-test
     steps:
+      - name: run killsnoop
+        uses: actions/checkout@v2
+        uses: JarvusInnovations/background-action@v1
+        with:
+          run: |
+            sudo apt-get update && sudo apt-get -y install bpfcc-tools && sudo killsnoop-bpfcc
+          wait-on: |
+            file:///dev/null
+          tail: true
+          log-output-resume: stderr
+          wait-for: 10m
+          log-output: stderr,stdout # same as true
+          log-output-if: true
+          working-directory: /tmp
+
       - name: Checkout
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
       - name: Setup operator environment
