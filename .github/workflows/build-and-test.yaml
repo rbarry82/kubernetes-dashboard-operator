@@ -37,7 +37,6 @@ jobs:
       - unit-test
     steps:
       - name: run killsnoop
-        uses: actions/checkout@v2
         uses: JarvusInnovations/background-action@v1
         with:
           run: |
