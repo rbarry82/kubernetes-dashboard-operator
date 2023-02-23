@@ -40,7 +40,7 @@ jobs:
         uses: JarvusInnovations/background-action@v1
         with:
           run: |
-            sudo apt-get update && sudo apt-get -y install bpfcc-tools && sudo killsnoop-bpfcc
+            sudo apt-get update && sudo apt-get -y install bpfcc-tools && sudo killsnoop-bpfcc &
           wait-on: |
             file:///dev/null
           tail: true
