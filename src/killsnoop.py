@@ -150,11 +150,11 @@ def print_event(cpu, data, size):
         % (
             strftime("%H:%M:%S").encode("ascii"),
             event.pid,
-            psutil.Process(event.pid).name(),
+            str.encode(psutil.Process(event.pid).name()),
             event.comm,
             event.sig,
             event.tpid,
-            psutil.Process(event.tpid).name(),
+            str.encode(psutil.Process(event.tpid).name()),
             event.ret,
         )
     )
