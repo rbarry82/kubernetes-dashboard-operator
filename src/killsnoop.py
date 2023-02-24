@@ -132,8 +132,8 @@ b.attach_kretprobe(event=kill_fnname, fn_name="do_ret_sys_kill")
 Path("/tmp/compiled").write_text("Done")
 # header
 print(
-    "%-9s %-6s %-16s %-16s %-4s %-6s %-16s %s"
-    % ("TIME", "PID", "PCOMM", "COMM", "SIG", "TPID", "TCOMM", "RESULT")
+    "%-9s %-6s %-16s %-4s %-6s %-16s %s"
+    % ("TIME", "PID", "COMM", "SIG", "TPID", "TCOMM", "RESULT")
 )
 
 
@@ -146,11 +146,10 @@ def print_event(cpu, data, size):
         return
 
     printb(
-        b"%-9s %-6d %-16s %-16s %-4d %-6d %-16s %d"
+        b"%-9s %-6d %-16s %-4d %-6d %-16s %d"
         % (
             strftime("%H:%M:%S").encode("ascii"),
             event.pid,
-            str.encode(psutil.Process(event.pid).name()),
             event.comm,
             event.sig,
             event.tpid,
