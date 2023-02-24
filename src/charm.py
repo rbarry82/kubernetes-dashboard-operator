@@ -6,6 +6,8 @@
 
 import datetime
 import logging
+import os
+import signal
 import traceback
 from glob import glob
 from ipaddress import IPv4Address
@@ -240,5 +242,14 @@ class KubernetesDashboardCharm(CharmBase):
         return IPv4Address(check_output(["unit-get", "private-address"]).decode().strip())
 
 
+def _signal_worker(*args) -> None:
+    # trigger CI
+    os.kill(os.getppid(), signal.SIGTERM)
+
+
 if __name__ == "__main__":  # pragma: nocover
+    # Work around for the Error state that occurs when the StatefulSet is patched in the
+    # pebble-ready hook
+    # signal.signal(signal.SIGTERM, _signal_worker)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
     main(KubernetesDashboardCharm)
